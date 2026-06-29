@@ -1,0 +1,17 @@
+FROM oven/bun:1 AS base
+WORKDIR /app
+
+# Install dependencies
+COPY package.json bunfig.toml ./
+COPY packages/shared/package.json ./packages/shared/
+COPY packages/service/package.json ./packages/service/
+RUN bun install --frozen-lockfile
+
+# Copy source
+COPY packages/shared ./packages/shared
+COPY packages/service ./packages/service
+COPY tsconfig.json ./
+
+EXPOSE 3000
+
+CMD ["bun", "packages/service/src/index.ts"]
