@@ -12,7 +12,7 @@
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
-    "types": []
+    "types": ["bun"]
   },
   "exclude": ["node_modules", "dist", "**/node_modules", "**/dist"]
 }
