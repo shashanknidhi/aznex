@@ -1,0 +1,32 @@
+# idea / local drafts
+.idea
+
+# dependencies
+node_modules/
+bun.lock
+
+# build output
+dist/
+*.js.map
+
+# environment
+.env
+.env.*
+!.env.example
+
+# OS
+.DS_Store
+Thumbs.db
+
+# logs
+*.log
+logs/
+
+# SQLite
+*.db
+*.db-wal
+*.db-shm
+
+# editor
+.vscode/
+*.swp
