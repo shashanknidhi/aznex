@@ -1,0 +1,22 @@
+{
+  "name": "aznex",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Team-shared institutional memory for coding agents — repo-scoped, agent-agnostic, MCP-served",
+  "license": "Apache-2.0",
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "engines": {
+    "bun": ">=1.0.0",
+    "node": ">=20.12.0"
+  },
+  "scripts": {
+    "build": "bun run --filter '*' build",
+    "typecheck": "bunx tsc --noEmit -p packages/shared/tsconfig.json && bunx tsc --noEmit -p packages/worker/tsconfig.json && bunx tsc --noEmit -p packages/service/tsconfig.json",
+    "test": "bun test",
+    "dev:service": "bun run --cwd packages/service dev",
+    "dev:worker": "bun run --cwd packages/worker dev"
+  }
+}

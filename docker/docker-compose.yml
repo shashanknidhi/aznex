@@ -1,0 +1,16 @@
+services:
+  service:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.service
+    ports:
+      - "3000:3000"
+    volumes:
+      - aznex-data:/app/data
+    environment:
+      - DATABASE_PATH=/app/data/aznex.db
+      # - GIT_HOST_TOKEN=<your token>
+    restart: unless-stopped
+
+volumes:
+  aznex-data:
