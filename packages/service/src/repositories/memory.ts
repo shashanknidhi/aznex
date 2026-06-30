@@ -151,7 +151,7 @@ export class MemoryRepository implements IMemoryRepository {
       JOIN memory_fts ON memory_fts.memory_id = memory.id
       WHERE memory_fts.repo_fingerprint = ?
         AND memory_fts MATCH ?
-      ORDER BY memory.updated_at_epoch DESC
+      ORDER BY bm25(memory_fts)
       LIMIT ?
     `).all(repoFingerprint, ftsQuery, limit) as MemoryRow[];
     return rows.map(mapRow);

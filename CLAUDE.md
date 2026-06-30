@@ -18,7 +18,7 @@ Inspired by and architecturally modelled after [claude-mem](https://github.com/t
 | MCP | `@modelcontextprotocol/sdk` |
 | Auth | `better-auth` |
 | DB (v1) | SQLite via `bun:sqlite` + FTS5 |
-| DB (target) | Postgres + pgvector |
+| DB (target) | Postgres + pgvector; Neo4j for graph+vector semantic search |
 | DAL pattern | Thin repository/DAO — no ORM, raw SQL, engine-agnostic interface |
 | Frontend | React + Vite |
 | Monorepo | Bun workspaces |
@@ -98,6 +98,7 @@ Read:  agent --MCP query--> service [auth+verify] --> DB --> agent
 ## Key design decisions (non-obvious)
 
 - **DAL must stay engine-agnostic** — SQLite v1, Postgres+pgvector target. Never let SQLite-specific SQL leak into business logic.
+- **Semantic search target: Neo4j (graph + vector) over ChromaDB** — Neo4j's vector index combined with Cypher graph traversal fits Aznex's data model better than a pure vector store. The memory→anchor→file→session→repo graph enables queries like "find stale memories touching files changed near this commit" natively. Evaluate after v1 FTS5 proves insufficient in production.
 - **Secret scanning is two-pass and mandatory** — client-side (worker, pre-transmission) + server-side (service, at ingestion). Zero leaks is a hard launch gate.
 - **Repo fingerprint ≠ local path** — the fingerprint must resolve to a canonical git-host identity (`host/owner/name`) so server-side permission checks can run. Local paths differ per developer and drift.
 - **`promotion_state = private` default** — captured memory is author-private until explicitly promoted to `team_shared`. Only `team_shared` records are returned by team reads.
