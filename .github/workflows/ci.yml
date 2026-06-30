@@ -25,3 +25,38 @@ jobs:
 
       - name: Test
         run: bun test packages/shared
+
+  service:
+    name: "@aznex/service"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Typecheck
+        run: bunx tsc --noEmit -p packages/service/tsconfig.json
+
+      - name: Test
+        run: bun test packages/service
+
+  frontend:
+    name: "@aznex/frontend"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Typecheck
+        run: bunx tsc --noEmit -p packages/frontend/tsconfig.json
