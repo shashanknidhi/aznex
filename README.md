@@ -37,7 +37,7 @@ The service is the only tier that touches the database. Every read and write pas
 | Package | Description |
 |---|---|
 | `@aznex/shared` | Shared TypeScript types, data model, API contracts |
-| `@aznex/worker` | Local background worker: hook adapter → extract → scrub → POST |
+| `@aznex/worker` | Local background daemon: hook adapter → extract (Claude Agent SDK, your subscription) → scrub → POST |
 | `@aznex/service` | Single deployable: ingestion API + MCP endpoint + frontend API |
 | `@aznex/frontend` | Read-only React SPA: browse, search, inspect team memory |
 
@@ -47,7 +47,8 @@ The service is the only tier that touches the database. Every read and write pas
 - **Language:** TypeScript
 - **Service:** Hono
 - **MCP:** `@modelcontextprotocol/sdk`
-- **DB (v1):** SQLite + FTS5 → Postgres + pgvector
+- **DB (v1):** SQLite + FTS5 → Postgres + pgvector; Neo4j for graph+vector semantic search
+- **Worker extraction:** Claude Agent SDK (uses your Claude subscription — no separate API key)
 - **Auth:** `better-auth`
 - **Frontend:** React + Vite
 - **Self-host:** Docker + docker-compose
