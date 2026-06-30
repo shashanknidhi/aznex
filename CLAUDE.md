@@ -83,6 +83,18 @@ Read:  agent --MCP query--> service [auth+verify] --> DB --> agent
 - `memory` — atomic knowledge unit; `type` ∈ `{raw_observation, extracted_learning, summary, negative_result, decision}`; `promotion_state` ∈ `{private, pending, team_shared}`; `freshness_state` ∈ `{fresh, stale_suspected}`
 - `memory_anchor` — `(memory_id, path, commit_sha)` — powers the staleness engine
 
+## Terminology
+
+| Term used in code | Means | Notes |
+|---|---|---|
+| **Repository** | A class that owns all DB access for one table (e.g. `MemoryRepository`) | GitHub issues may say "DAO module" — same thing |
+| **DAL** | Data Access Layer — the `repositories/` directory as a whole | The layer between business logic and the database |
+| **DAO** | Data Access Object — synonym for Repository; used in issue descriptions | We use "Repository" in code for consistency with the claude-mem reference |
+| **Repo fingerprint** | Canonical git identity: `github.com/owner/name` | Not a local path — must be resolvable by the service for permission checks |
+| **Promotion state** | `private → pending → team_shared` lifecycle of a memory | Only `team_shared` memories are returned to team reads |
+| **Freshness state** | `fresh` or `stale_suspected` — whether anchored code has changed since capture | Set by the staleness engine, not by the worker |
+| **FTS5** | SQLite's built-in full-text search extension | Used for keyword search over `memory.content` and related fields |
+
 ## Key design decisions (non-obvious)
 
 - **DAL must stay engine-agnostic** — SQLite v1, Postgres+pgvector target. Never let SQLite-specific SQL leak into business logic.
