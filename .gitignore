@@ -30,3 +30,6 @@ logs/
 # editor
 .vscode/
 *.swp
+
+# superpowers plans/specs (local session artifacts)
+docs/superpowers/
