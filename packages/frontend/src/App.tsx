@@ -295,7 +295,7 @@ function MemoryList() {
             {m.promotion_state !== "team_shared" && <span className="badge private">{m.promotion_state}</span>}
             <p>{m.title ? <strong>{m.title} — </strong> : null}{preview(m.content)}</p>
             <p className="muted">
-              {m.author_id} · {formatDate(m.created_at_epoch)}
+              {m.author_login ?? m.author_id} · {formatDate(m.created_at_epoch)}
               {m.mine && m.promotion_state === "private" && (
                 <button
                   className="small"
@@ -371,7 +371,7 @@ function MemoryView() {
       )}
       <h3>Provenance</h3>
       <p className="muted">
-        by {memory.author_id} on {formatDate(memory.created_at_epoch)}
+        by {memory.author_login ?? memory.author_id} on {formatDate(memory.created_at_epoch)}
         {typeof memory.metadata["prompt_version"] === "string" &&
           ` · prompt ${memory.metadata["prompt_version"]}`}
       </p>
