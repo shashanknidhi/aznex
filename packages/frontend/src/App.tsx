@@ -161,6 +161,7 @@ function RepoSelect() {
           </li>
         ))}
       </ul>
+      <ApiKeys />
       {isAdmin && (
         <>
           <h3>Onboard repositories (admin)</h3>
@@ -217,6 +218,37 @@ function GithubSetup() {
       )}
       <p><Link to="/">← back to repositories</Link></p>
     </div>
+  );
+}
+
+function ApiKeys() {
+  const [keys, setKeys] = useState<Awaited<ReturnType<typeof api.keys>>["keys"] | null>(null);
+  const load = () => api.keys().then((r) => setKeys(r.keys)).catch(() => setKeys([]));
+  useEffect(() => {
+    void load();
+  }, []);
+  if (!keys || keys.length === 0) return null;
+  return (
+    <>
+      <h3>Your API keys</h3>
+      <p className="muted">One is minted per setup run. Revoking is permanent — a revoked worker just re-runs setup.</p>
+      <ul className="list">
+        {keys.map((k) => (
+          <li key={k.id} className="repo-row">
+            <span>
+              <code>{k.prefix}…</code> <span className="muted">{k.name} · created {formatDate(k.created_at_epoch)} ·{" "}
+              {k.last_used_at_epoch ? `last used ${formatDate(k.last_used_at_epoch)}` : "never used"}</span>{" "}
+              {k.status === "revoked" && <span className="badge stale">revoked</span>}
+            </span>
+            {k.status === "active" && (
+              <button className="danger small" onClick={() => void api.revokeKey(k.id).then(load)}>
+                revoke
+              </button>
+            )}
+          </li>
+        ))}
+      </ul>
+    </>
   );
 }
 
