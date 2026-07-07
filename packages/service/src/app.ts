@@ -16,7 +16,10 @@ export interface AppEnv {
   };
 }
 
-export function createApp(db: Database, opts?: { auth?: Auth }): Hono<AppEnv> {
+export function createApp(
+  db: Database,
+  opts?: { auth?: Auth; staticDir?: string },
+): Hono<AppEnv> {
   const app = new Hono<AppEnv>();
   const auth = opts?.auth ?? null;
 
@@ -45,6 +48,23 @@ export function createApp(db: Database, opts?: { auth?: Auth }): Hono<AppEnv> {
   registerMemoryRoutes(api, auth); // #15 frontend read API
   registerRepoRoutes(api, auth); // #22 repo selector
   app.route("/api", api);
+
+  // Production frontend: serve the built SPA (vite dist) from the service so
+  // the whole app is one same-origin deployable. API groups above win; any
+  // other GET falls back to index.html for client-side routing.
+  const staticDir = opts?.staticDir;
+  if (staticDir) {
+    app.get("*", async (c) => {
+      const path = new URL(c.req.url).pathname;
+      if (!path.includes("..")) {
+        const file = Bun.file(`${staticDir}${path}`);
+        if (path !== "/" && (await file.exists())) return new Response(file);
+      }
+      return new Response(Bun.file(`${staticDir}/index.html`), {
+        headers: { "Content-Type": "text/html; charset=utf-8" },
+      });
+    });
+  }
 
   app.onError((err, c) => {
     console.error("unhandled error:", err);
