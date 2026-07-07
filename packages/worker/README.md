@@ -42,8 +42,10 @@ git tag v0.1.1 && git push origin v0.1.1
 ```
 
 The workflow gates on typecheck + tests, refuses a tag that doesn't match the
-package versions, and skips versions already on npm (safe to re-run). It needs
-the `NPM_TOKEN` repo secret (npm Automation token from the aznex org owner).
+package versions, and skips versions already on npm (safe to re-run). Auth is
+npm **trusted publishing** (OIDC — no token secret): configure each package
+once on npmjs.com under Settings → Trusted Publisher (GitHub Actions, repo
+`shashanknidhi/aznex`, workflow `release.yml`).
 Both packages publish from TS source — no build step; `bun publish` rewrites
 the `workspace:*` dependency to the pinned version.
 
