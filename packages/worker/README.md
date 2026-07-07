@@ -52,6 +52,13 @@ the `workspace:*` dependency to the pinned version.
 Deployment is separate: Railway auto-deploys every push to `main` (build and
 healthcheck come from `railway.json`).
 
+## Updates
+
+The daemon self-updates: on start and daily it checks npm, installs a newer
+`@aznex/worker` if one exists, and restarts itself via the daemon manager.
+Set `AZNEX_AUTO_UPDATE=off` to pin a version (then update manually with
+`bun install -g @aznex/worker@latest`).
+
 ## Run
 
 ```sh
