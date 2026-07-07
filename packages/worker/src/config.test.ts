@@ -30,7 +30,7 @@ test("env vars win over the config file", () => {
 
 test("missing or malformed config file degrades to nulls and default port", () => {
   const missing = loadWorkerConfig("/nonexistent/config.json");
-  expect(missing).toEqual({ serviceUrl: null, apiKey: null, workerPort: 3001, claudePath: null });
+  expect(missing).toEqual({ serviceUrl: null, apiKey: null, workerPort: 29639, claudePath: null });
   const malformed = loadWorkerConfig(tmpConfig("not json{"));
   expect(malformed.serviceUrl).toBe(null);
 });
