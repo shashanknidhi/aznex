@@ -50,10 +50,12 @@ export async function runSetup(args: string[]): Promise<void> {
     return;
   }
 
-  // Extraction spawns the local `claude` binary — fail setup loudly now rather
-  // than have the daemon silently produce nothing later.
+  // Extraction spawns the local `claude` binary — resolve it NOW, in the
+  // user's shell where PATH works, and persist it: the daemon runs under
+  // launchd/systemd with a minimal PATH and would never find it.
+  let claudePath: string;
   try {
-    findClaude();
+    claudePath = findClaude();
   } catch {
     console.error("✗ `claude` executable not found. Install Claude Code first (or set CLAUDE_CODE_PATH).");
     process.exit(1);
@@ -89,7 +91,7 @@ export async function runSetup(args: string[]): Promise<void> {
 
   console.log(`→ writing ${CONFIG_PATH}`);
   mkdirSync(dirname(CONFIG_PATH), { recursive: true });
-  writeFileSync(CONFIG_PATH, JSON.stringify({ serviceUrl, apiKey }, null, 2) + "\n");
+  writeFileSync(CONFIG_PATH, JSON.stringify({ serviceUrl, apiKey, claudePath }, null, 2) + "\n");
   chmodSync(CONFIG_PATH, 0o600);
 
   console.log("→ installing worker daemon");

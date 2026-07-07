@@ -1,9 +1,10 @@
 import { join } from "path";
-import { tmpdir } from "os";
+import { tmpdir, homedir } from "os";
 import { writeFileSync, existsSync, rmSync } from "fs";
 import { execSync } from "child_process";
 import { MemorySchema, type Memory } from "@aznex/shared";
 import type { RawObservation } from "./compress.js";
+import { loadWorkerConfig } from "./config.js";
 
 // LLM extraction stage (#19). Distills raw_observation records into typed
 // memories via the Claude Agent SDK pattern: spawn the local `claude` binary
@@ -21,17 +22,40 @@ export interface ExtractionContext {
 // Runner is injectable so tests never spawn a real Claude process.
 export type ExtractionRunner = (promptPath: string, observationsPath: string) => Promise<string>;
 
-export function findClaude(): string {
-  const envPath = process.env["CLAUDE_CODE_PATH"];
-  if (envPath) {
-    if (!existsSync(envPath)) throw new Error(`CLAUDE_CODE_PATH set but not found: ${envPath}`);
-    return envPath;
+// Resolution order — adapted from claude-mem's battle-tested resolver
+// (https://github.com/thedotmack/claude-mem, src/shared/find-claude-executable.ts),
+// which documents this exact daemon failure mode: "may not be on the worker's
+// PATH at all depending on how the daemon was spawned".
+//   1. CLAUDE_CODE_PATH env — explicit override, fails LOUD if wrong
+//   2. ~/.aznex/config.json path persisted by setup — falls through if stale
+//      (Claude Code updates can move the binary; don't brick the pipeline)
+//   3. `which claude` — works in shells, usually not under launchd/systemd
+//   4. known install locations that daemons' minimal PATH never includes
+// ponytail: no capability probing / version ranking (claude-mem does both);
+// add if stale-CLI selection ever bites the pilot.
+// Known locations list also per claude-mem (native installer + legacy local).
+const KNOWN_CLAUDE_LOCATIONS = [
+  join(homedir(), ".local", "bin", "claude"), // native installer symlink
+  join(homedir(), ".claude", "local", "claude"), // legacy local install
+];
+
+export function findClaude(configPath?: string): string {
+  const env = process.env["CLAUDE_CODE_PATH"];
+  if (env) {
+    if (!existsSync(env)) throw new Error(`CLAUDE_CODE_PATH set but not found: ${env}`);
+    return env;
   }
+  const configured = loadWorkerConfig(configPath).claudePath;
+  if (configured && existsSync(configured)) return configured;
   try {
     return execSync("which claude", { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }).trim();
   } catch {
-    throw new Error("claude executable not found. Install Claude Code or set CLAUDE_CODE_PATH.");
+    // daemon PATH miss — fall through to fixed locations
   }
+  for (const candidate of KNOWN_CLAUDE_LOCATIONS) {
+    if (existsSync(candidate)) return candidate;
+  }
+  throw new Error("claude executable not found. Install Claude Code or set CLAUDE_CODE_PATH.");
 }
 
 const defaultRunner: ExtractionRunner = async (promptPath, observationsPath) => {
