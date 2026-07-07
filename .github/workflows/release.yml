@@ -1,0 +1,57 @@
+name: Release
+
+# Publishes @aznex/shared and @aznex/worker to npm.
+# Trigger: push a tag like v0.1.1 (or run manually from the Actions tab).
+# Railway deployment is separate — it auto-deploys every push to main.
+#
+# Requires the NPM_TOKEN repo secret: an npm "Automation" access token from an
+# account that owns the aznex org (npmjs.com → Access Tokens).
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  publish:
+    name: Publish to npm
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Gate on typecheck + tests
+        run: bun run typecheck && bun test
+
+      - name: Verify tag matches package versions
+        if: github.ref_type == 'tag'
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          for pkg in shared worker; do
+            VERSION=$(jq -r .version packages/$pkg/package.json)
+            if [ "$VERSION" != "$TAG" ]; then
+              echo "::error::packages/$pkg is $VERSION but tag is $TAG — bump versions before tagging"
+              exit 1
+            fi
+          done
+
+      - name: Publish (skips versions already on npm)
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
+          for pkg in shared worker; do   # shared first — worker depends on it
+            NAME=$(jq -r .name packages/$pkg/package.json)
+            VERSION=$(jq -r .version packages/$pkg/package.json)
+            if npm view "$NAME@$VERSION" version >/dev/null 2>&1; then
+              echo "$NAME@$VERSION already published — skipping"
+            else
+              (cd packages/$pkg && bun publish)
+            fi
+          done
