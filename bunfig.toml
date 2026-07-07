@@ -1,3 +1,4 @@
 [install]
 # Hoist shared dependencies to the root node_modules
 hoist = true
+linker = "hoisted"
