@@ -8,18 +8,22 @@ Hooks always return immediately — payloads are queued on `POST /hook` and proc
 
 ## Developer install (no repo clone needed)
 
-One command — installs Bun if missing, installs this package, runs setup:
+One command — installs Bun if missing, installs this package, runs setup.
+Auth happens in your browser (GitHub login on the Aznex web app), no key to
+copy around:
 
 ```sh
-curl -fsSL https://<your-app>.up.railway.app/install.sh | bash -s -- --api-key axk_…
+curl -fsSL https://<your-app>.up.railway.app/install.sh | bash
 ```
 
 Or manually with [Bun](https://bun.sh) already installed:
 
 ```sh
 bun install -g @aznex/worker
-aznex-worker setup --service-url https://<your-app>.up.railway.app --api-key axk_…
+aznex-worker setup --service-url https://<your-app>.up.railway.app
 ```
+
+Headless/CI machines can skip the browser flow with `--api-key axk_…`.
 
 Prereq either way: Claude Code. Setup validates the URL + key
 against the live service, writes `~/.aznex/config.json` (0600 — the daemon

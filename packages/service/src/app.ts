@@ -6,6 +6,7 @@ import { registerIngestRoutes } from "./routes/ingest.js";
 import { registerMcpRoutes } from "./routes/mcp.js";
 import { registerMemoryRoutes } from "./routes/memories.js";
 import { registerRepoRoutes } from "./routes/repos.js";
+import { registerCliAuthRoutes } from "./routes/cli-auth.js";
 import type { Auth } from "./auth/session.js";
 
 // Context shared across all handlers. `user` is set by the auth middleware (#10).
@@ -56,6 +57,7 @@ export function createApp(
   }
   registerMemoryRoutes(api, auth); // #15 frontend read API
   registerRepoRoutes(api, auth); // #22 repo selector
+  registerCliAuthRoutes(api, auth); // browser login for aznex-worker setup
   app.route("/api", api);
 
   // Production frontend: serve the built SPA (vite dist) from the service so

@@ -15,6 +15,7 @@ import { createInterface } from "readline/promises";
 import { CONFIG_PATH } from "./src/config.js";
 import { mergeClaudeSettings } from "./src/claude-settings.js";
 import { findClaude } from "./src/extract.js";
+import { browserAuth } from "./src/browser-auth.js";
 import { installDaemon, uninstallDaemon } from "./daemon/install.js";
 import { LOG_FILE } from "./daemon/templates.js";
 
@@ -59,10 +60,23 @@ export async function runSetup(args: string[]): Promise<void> {
   }
 
   const serviceUrl = (flag("service-url") ?? (await ask("Aznex service URL: "))).replace(/\/+$/, "");
-  const apiKey = flag("api-key") ?? (await ask("API key (axk_…): "));
-  if (!serviceUrl || !apiKey) {
-    console.error("usage: aznex-worker setup --service-url <url> --api-key <axk_…>");
+  if (!serviceUrl) {
+    console.error("usage: aznex-worker setup --service-url <url> [--api-key <axk_…>]");
     process.exit(1);
+  }
+
+  // Default: browser login (GitHub OAuth on the Aznex web app) mints the key.
+  // --api-key remains as the headless/CI fallback.
+  let apiKey = flag("api-key");
+  if (!apiKey) {
+    try {
+      apiKey = await browserAuth(serviceUrl);
+      console.log("✓ device authorized");
+    } catch (err) {
+      console.error(`✗ ${err instanceof Error ? err.message : err}`);
+      console.error("  (headless machine? re-run with --api-key <axk_…>)");
+      process.exit(1);
+    }
   }
 
   console.log("→ validating against the service…");
