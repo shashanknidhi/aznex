@@ -223,3 +223,75 @@ test("session with only noisy events never POSTs", async () => {
   await pipeline({ hook_event_name: "Stop", session_id: "s2" });
   expect(fetched).toBe(false);
 });
+
+function fetchRouter(onboardedFingerprints: string[], ingestStatus = 202) {
+  const calls: string[] = [];
+  const impl = (async (url: unknown, init?: RequestInit) => {
+    const u = String(url);
+    calls.push(`${init?.method ?? "GET"} ${u}`);
+    if (u.endsWith("/api/repos")) {
+      return new Response(JSON.stringify({ repos: onboardedFingerprints.map((fingerprint) => ({ fingerprint })) }), { status: 200 });
+    }
+    return new Response(
+      ingestStatus === 202 ? JSON.stringify({ accepted: 1, rejected: [] }) : JSON.stringify({ error: "unknown_repo" }),
+      { status: ingestStatus },
+    );
+  }) as unknown as typeof fetch;
+  return { impl, calls };
+}
+
+const EVT = (sid: string) => [
+  { hook_event_name: "PostToolUse", session_id: sid, cwd: import.meta.dir, tool_name: "Edit", tool_input: { file_path: "a.ts" }, tool_response: "ok" },
+  { hook_event_name: "Stop", session_id: sid },
+];
+
+test("non-onboarded repo: extraction never runs, drop is logged by name", async () => {
+  let extracted = false;
+  const { impl, calls } = fetchRouter(["github.com/acme/other"]);
+  const pipeline = createPipeline({
+    runner: async () => {
+      extracted = true;
+      return "[]";
+    },
+    ingest: { serviceUrl: "http://svc", apiKey: "k", fetchImpl: impl, baseDelayMs: 1 },
+  });
+  for (const e of EVT("skip-1")) await pipeline(e);
+  expect(extracted).toBe(false); // the whole point: no LLM call for 403-bound repos
+  expect(calls.some((c) => c.includes("/api/repos"))).toBe(true);
+  expect(calls.some((c) => c.includes("/v1/ingest"))).toBe(false);
+});
+
+test("onboarded repo passes the gate and ingests", async () => {
+  const fp = (await import("@aznex/shared")).normalizeRemoteUrl(
+    (await Bun.$`git remote get-url origin`.cwd(import.meta.dir).text()).trim(),
+  )!;
+  const { impl, calls } = fetchRouter([fp]);
+  const pipeline = createPipeline({
+    runner: async () => JSON.stringify([FAKE_RECORD]),
+    ingest: { serviceUrl: "http://svc", apiKey: "k", fetchImpl: impl, baseDelayMs: 1 },
+    git: async () => "sha",
+  });
+  for (const e of EVT("pass-1")) await pipeline(e);
+  expect(calls.some((c) => c.includes("/v1/ingest"))).toBe(true);
+});
+
+test("ingest failure is logged with session+repo and does not throw", async () => {
+  const fp = (await import("@aznex/shared")).normalizeRemoteUrl(
+    (await Bun.$`git remote get-url origin`.cwd(import.meta.dir).text()).trim(),
+  )!;
+  const { impl } = fetchRouter([fp], 403);
+  const warnings: string[] = [];
+  const origWarn = console.warn;
+  console.warn = (...a: unknown[]) => warnings.push(a.join(" "));
+  try {
+    const pipeline = createPipeline({
+      runner: async () => JSON.stringify([FAKE_RECORD]),
+      ingest: { serviceUrl: "http://svc", apiKey: "k", fetchImpl: impl, baseDelayMs: 1, maxAttempts: 1 },
+      git: async () => "sha",
+    });
+    for (const e of EVT("fail-1")) await pipeline(e); // must not throw
+    expect(warnings.some((w) => w.includes("fail-1") && w.includes(fp))).toBe(true);
+  } finally {
+    console.warn = origWarn;
+  }
+});
