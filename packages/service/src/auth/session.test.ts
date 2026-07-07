@@ -103,3 +103,19 @@ test("no cookie and no bearer token → 401", async () => {
   expect((await app.request("/api/repos")).status).toBe(401);
   expect((await app.request(`/api/memories?repo_fingerprint=${FP}`)).status).toBe(401);
 });
+
+test("allowlist blocks non-listed users on both session and bearer paths", async () => {
+  const { app } = await seed();
+  const cookie = await signUpAndGetCookie(app); // github_login "alice"
+  process.env["AZNEX_ALLOWED_GITHUB_LOGINS"] = "someone-else";
+  try {
+    const viaSession = await app.request("/api/repos", { headers: { Cookie: cookie } });
+    expect(viaSession.status).toBe(403);
+    expect(((await viaSession.json()) as any).error).toBe("github_login_not_allowed");
+
+    process.env["AZNEX_ALLOWED_GITHUB_LOGINS"] = "alice";
+    expect((await app.request("/api/repos", { headers: { Cookie: cookie } })).status).toBe(200);
+  } finally {
+    delete process.env["AZNEX_ALLOWED_GITHUB_LOGINS"];
+  }
+});
