@@ -34,16 +34,21 @@ login daemon, wires the Claude Code capture hooks globally in
 
 ## Publishing (maintainers)
 
-Both packages publish from TS source — no build step. `bun publish` rewrites
-the `workspace:*` dependency to the real version.
+CI publishes both packages when you push a version tag (`.github/workflows/release.yml`):
 
 ```sh
-npm login                                   # owner of the aznex npm org
-bun publish --cwd packages/shared
-bun publish --cwd packages/worker
+# bump "version" in packages/shared/package.json AND packages/worker/package.json, then:
+git tag v0.1.1 && git push origin v0.1.1
 ```
 
-Bump both versions together; the worker pins `@aznex/shared` at publish time.
+The workflow gates on typecheck + tests, refuses a tag that doesn't match the
+package versions, and skips versions already on npm (safe to re-run). It needs
+the `NPM_TOKEN` repo secret (npm Automation token from the aznex org owner).
+Both packages publish from TS source — no build step; `bun publish` rewrites
+the `workspace:*` dependency to the pinned version.
+
+Deployment is separate: Railway auto-deploys every push to `main` (build and
+healthcheck come from `railway.json`).
 
 ## Run
 
