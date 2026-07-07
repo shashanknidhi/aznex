@@ -10,3 +10,4 @@ export * from "./schemas/memory-anchor.js";
 export * from "./schemas/agent-event.js";
 export * from "./api.js";
 export * from "./secret-scan.js";
+export * from "./repo-fingerprint.js";
