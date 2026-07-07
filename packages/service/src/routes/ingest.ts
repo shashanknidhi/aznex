@@ -57,8 +57,14 @@ export function registerIngestRoutes(app: Hono<AppEnv>): void {
         continue; // reject per-memory, not the whole batch
       }
       // Idempotent: a memory already stored (same id) is a no-op re-send.
-      if (!memories.getById(m.id)) {
+      const alreadyStored = Boolean(memories.getById(m.id));
+      if (!alreadyStored) {
         memories.create(toCreateMemory(m, req, user.id));
+        // Deployment-configurable default (team_shared for the pilot);
+        // create() itself always starts rows private per the schema.
+        if (loadConfig().defaultPromotion === "team_shared") {
+          memories.setPromotion(m.id, "team_shared");
+        }
         for (const a of m.anchors) {
           anchors.upsert({ memory_id: m.id, path: a.path, commit_sha: a.commit_sha ?? null });
         }

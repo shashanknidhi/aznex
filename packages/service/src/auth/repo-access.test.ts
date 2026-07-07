@@ -6,6 +6,7 @@ import { verifyRepoAccess, clearRepoAccessCache } from "./repo-access.js";
 
 const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
 const config: Config = {
+  defaultPromotion: "team_shared",
   port: 0,
   githubAppId: "12345",
   githubAppPrivateKey: privateKey.export({ type: "pkcs1", format: "pem" }).toString(),

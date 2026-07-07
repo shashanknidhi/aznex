@@ -8,6 +8,8 @@ export interface MemoryItem {
   title: string | null;
   content: string;
   freshness_state: string;
+  promotion_state: string;
+  mine?: boolean;
   author_id: string;
   created_at_epoch: number;
 }
@@ -61,4 +63,6 @@ export const api = {
     return get<{ items: MemoryItem[]; total: number; page: number }>(`/api/memories?${params}`);
   },
   memory: (id: string) => get<MemoryDetail>(`/api/memories/${encodeURIComponent(id)}`),
+  promote: (id: string) => adminPost<unknown>(`/api/memories/${encodeURIComponent(id)}/promote`, {}),
+  revoke: (id: string) => adminPost<unknown>(`/api/memories/${encodeURIComponent(id)}/revoke`, {}),
 };
