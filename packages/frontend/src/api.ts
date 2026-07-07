@@ -65,5 +65,10 @@ export const api = {
   },
   memory: (id: string) => get<MemoryDetail>(`/api/memories/${encodeURIComponent(id)}`),
   promote: (id: string) => adminPost<unknown>(`/api/memories/${encodeURIComponent(id)}/promote`, {}),
+  keys: () =>
+    get<{ keys: { id: string; name: string; prefix: string; status: string; created_at_epoch: number; last_used_at_epoch: number | null }[] }>(
+      "/api/keys",
+    ),
+  revokeKey: (id: string) => adminPost<unknown>(`/api/keys/${encodeURIComponent(id)}/revoke`, {}),
   revoke: (id: string) => adminPost<unknown>(`/api/memories/${encodeURIComponent(id)}/revoke`, {}),
 };
