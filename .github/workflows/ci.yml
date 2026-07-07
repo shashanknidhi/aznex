@@ -79,3 +79,18 @@ jobs:
 
       - name: Typecheck
         run: bunx tsc --noEmit -p packages/frontend/tsconfig.json
+
+      - name: Test
+        run: bun test packages/frontend
+
+      - name: Build
+        run: bun run --cwd packages/frontend build
+
+  docker:
+    name: "Docker image (Railway artifact)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build service image
+        run: docker build -f docker/Dockerfile.service .

@@ -13,6 +13,7 @@ import { homedir } from "os";
 import { existsSync, mkdirSync, readFileSync, writeFileSync, chmodSync } from "fs";
 import { createInterface } from "readline/promises";
 import { CONFIG_PATH } from "./src/config.js";
+import { findClaude } from "./src/extract.js";
 import { mergeClaudeSettings } from "./src/claude-settings.js";
 import { installDaemon, uninstallDaemon } from "./daemon/install.js";
 import { LOG_FILE } from "./daemon/templates.js";
@@ -52,6 +53,15 @@ if (import.meta.main) {
   const apiKey = flag("api-key") ?? (await ask("API key (axk_…): "));
   if (!serviceUrl || !apiKey) {
     console.error("usage: setup.ts --service-url <url> --api-key <axk_…>");
+    process.exit(1);
+  }
+
+  // Extraction spawns the local `claude` binary — fail setup loudly now rather
+  // than have the daemon silently produce nothing later.
+  try {
+    findClaude();
+  } catch {
+    console.error("✗ `claude` executable not found. Install Claude Code first (or set CLAUDE_CODE_PATH).");
     process.exit(1);
   }
 
