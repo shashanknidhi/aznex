@@ -53,6 +53,47 @@ function appJwt(appId: string, privateKey: string, nowSec: number): string {
 
 const GH_HEADERS = { Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" };
 
+/**
+ * Resolve a repo's GitHub numeric id and App installation id from its
+ * canonical "owner/name" — so admins onboard by name alone. Uses the same
+ * GitHub App credentials as access verification.
+ */
+export async function resolveRepoInstallation(
+  canonical: string,
+  config: Config,
+  fetchImpl: FetchImpl = fetch,
+): Promise<{ githubRepoId: string; installationId: number }> {
+  if (!config.githubAppId || !config.githubAppPrivateKey) {
+    throw new Error("GitHub App credentials not configured (GITHUB_APP_ID / GITHUB_APP_PRIVATE_KEY)");
+  }
+  const jwt = appJwt(config.githubAppId, config.githubAppPrivateKey, Math.floor(Date.now() / 1000));
+
+  // 1. Which installation covers this repo? (also proves the App is installed on it)
+  const instRes = await fetchImpl(`https://api.github.com/repos/${canonical}/installation`, {
+    headers: { ...GH_HEADERS, Authorization: `Bearer ${jwt}` },
+  });
+  if (!instRes.ok) {
+    throw new Error(`GitHub App is not installed on ${canonical} (or repo not found)`);
+  }
+  const { id: installationId } = (await instRes.json()) as { id: number };
+
+  // 2. Repo numeric id, via a short-lived installation token.
+  const tokenRes = await fetchImpl(
+    `https://api.github.com/app/installations/${installationId}/access_tokens`,
+    { method: "POST", headers: { ...GH_HEADERS, Authorization: `Bearer ${jwt}` } },
+  );
+  if (!tokenRes.ok) throw new Error(`could not mint installation token for ${canonical}`);
+  const { token } = (await tokenRes.json()) as { token: string };
+
+  const repoRes = await fetchImpl(`https://api.github.com/repos/${canonical}`, {
+    headers: { ...GH_HEADERS, Authorization: `Bearer ${token}` },
+  });
+  if (!repoRes.ok) throw new Error(`could not read ${canonical}`);
+  const { id: repoId } = (await repoRes.json()) as { id: number };
+
+  return { githubRepoId: String(repoId), installationId };
+}
+
 export async function verifyRepoAccess(opts: VerifyOpts): Promise<RepoAccess> {
   const { user, repo, config } = opts;
   const doFetch = opts.fetchImpl ?? fetch;

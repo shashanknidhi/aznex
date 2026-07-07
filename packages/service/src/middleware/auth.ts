@@ -11,6 +11,16 @@ export function hashToken(token: string): string {
 // Deployment-level allowlist (pilot gate). AZNEX_ALLOWED_GITHUB_LOGINS is a
 // comma-separated list of GitHub usernames; unset/empty means open (the
 // self-host default — per-repo GitHub verification still gates all data).
+export function isAdminGithubLogin(login: string): boolean {
+  const raw = process.env["AZNEX_ADMIN_GITHUB_LOGINS"];
+  if (!raw?.trim()) return false; // no admins configured = no admin surface
+  return raw
+    .split(",")
+    .map((l) => l.trim().toLowerCase())
+    .filter(Boolean)
+    .includes(login.toLowerCase());
+}
+
 export function githubLoginAllowed(login: string): boolean {
   const raw = process.env["AZNEX_ALLOWED_GITHUB_LOGINS"];
   if (!raw?.trim()) return true;

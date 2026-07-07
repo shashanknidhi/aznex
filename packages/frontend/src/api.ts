@@ -33,7 +33,17 @@ async function get<T>(path: string): Promise<T> {
 }
 
 export const api = {
-  repos: () => get<{ repos: RepoInfo[]; user: { login: string } }>("/api/repos"),
+  repos: () =>
+    get<{ repos: RepoInfo[]; user: { login: string; is_admin: boolean } }>("/api/repos"),
+  addRepo: async (body: { fingerprint: string }) => {
+    const res = await fetch("/api/admin/repos", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error(((await res.json()) as { error?: string }).error ?? `failed: ${res.status}`);
+  },
   memories: (fingerprint: string, opts?: { q?: string; page?: number }) => {
     const params = new URLSearchParams({ repo_fingerprint: fingerprint });
     if (opts?.q) params.set("q", opts.q);
