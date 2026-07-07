@@ -41,8 +41,12 @@ if (import.meta.main) {
   const { openDatabase } = await import('./db/connection.js');
   const { createApp } = await import('./app.js');
   const { loadConfig } = await import('./config.js');
+  const { createAuth, migrateAuthSchema } = await import('./auth/session.js');
   const config = loadConfig();
-  const app = createApp(openDatabase());
+  const db = openDatabase();
+  const auth = createAuth(db);
+  await migrateAuthSchema(auth);
+  const app = createApp(db, { auth });
   console.log(`@aznex/service listening on :${config.port}`);
   Bun.serve({ port: config.port, fetch: app.fetch });
 }

@@ -1,7 +1,7 @@
 import type { Hono } from "hono";
 import type { AppEnv } from "../app.js";
 import { loadConfig } from "../config.js";
-import { apiKeyAuth } from "../middleware/auth.js";
+import { sessionOrApiKeyAuth, type Auth } from "../auth/session.js";
 import { verifyRepoAccess } from "../auth/repo-access.js";
 import { RepoRepository } from "../repositories/repo.js";
 import { MemoryRepository, type MemoryFilter } from "../repositories/memory.js";
@@ -11,10 +11,10 @@ const PAGE_SIZE = 20;
 // Read API serves team knowledge only; private/pending stay author-local.
 const TEAM_SHARED: MemoryFilter = { promotionState: "team_shared" };
 
-// Frontend read API (#15). ponytail: Bearer API-key auth for now — swapped to
-// better-auth browser sessions when the frontend OAuth flow lands (#22).
-export function registerMemoryRoutes(app: Hono<AppEnv>): void {
-  app.get("/memories", apiKeyAuth(), async (c) => {
+// Frontend read API (#15). Accepts a better-auth browser session (#22) or a
+// Bearer API key.
+export function registerMemoryRoutes(app: Hono<AppEnv>, auth: Auth | null): void {
+  app.get("/memories", sessionOrApiKeyAuth(auth), async (c) => {
     const fingerprint = c.req.query("repo_fingerprint");
     if (!fingerprint) return c.json({ error: "repo_fingerprint required" }, 400);
     const page = Math.max(1, Number(c.req.query("page") ?? 1) || 1);
@@ -40,7 +40,7 @@ export function registerMemoryRoutes(app: Hono<AppEnv>): void {
     return c.json({ items, total, page });
   });
 
-  app.get("/memories/:id", apiKeyAuth(), async (c) => {
+  app.get("/memories/:id", sessionOrApiKeyAuth(auth), async (c) => {
     const db = c.get("db");
     const memory = new MemoryRepository(db).getById(c.req.param("id"));
     // Hide non-shared records the same way as missing ones — don't leak existence.
