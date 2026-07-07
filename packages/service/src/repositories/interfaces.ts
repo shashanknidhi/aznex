@@ -30,6 +30,7 @@ export interface IRepoRepository {
   create(input: CreateRepo): Repo;
   getById(id: string): Repo | null;
   getByFingerprint(fingerprint: string): Repo | null;
+  getActiveByFingerprint(fingerprint: string): Repo | null;
   update(id: string, input: Partial<CreateRepo>): Repo | null;
   list(limit?: number): Repo[];
 }

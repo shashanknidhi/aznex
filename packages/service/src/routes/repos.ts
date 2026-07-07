@@ -14,7 +14,7 @@ export function registerRepoRoutes(app: Hono<AppEnv>, auth: Auth | null): void {
     const db = c.get("db");
     const user = c.get("user");
     const config = loadConfig();
-    const repos = new RepoRepository(db).list();
+    const repos = new RepoRepository(db).list().filter((r) => r.status === "active");
     const accessible = [];
     for (const repo of repos) {
       const access = await verifyRepoAccess({ user, repo, config }).catch(() => ({ allowed: false }));
@@ -29,6 +29,10 @@ export function registerRepoRoutes(app: Hono<AppEnv>, auth: Auth | null): void {
         display_name: user.display_name,
         is_admin: isAdminGithubLogin(user.github_login),
       },
+      // GitHub's own install/select-repos page (admins onboard from there).
+      github_app_install_url: process.env["AZNEX_GITHUB_APP_SLUG"]
+        ? `https://github.com/apps/${process.env["AZNEX_GITHUB_APP_SLUG"]}/installations/new`
+        : null,
     });
   });
 }

@@ -29,7 +29,7 @@ function readFilter(includeStale: boolean): MemoryFilter {
 }
 
 async function checkRepoAccess(db: Database, user: User, fingerprint: string): Promise<string | null> {
-  const repo = new RepoRepository(db).getByFingerprint(fingerprint);
+  const repo = new RepoRepository(db).getActiveByFingerprint(fingerprint);
   if (!repo) return "unknown_repo";
   const access = await verifyRepoAccess({ user, repo, config: loadConfig() });
   return access.allowed ? null : "forbidden";
