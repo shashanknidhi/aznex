@@ -1,8 +1,8 @@
 #!/usr/bin/env bun
-// aznex-setup — one-command developer install.
+// aznex-worker setup — one-command developer install.
 //
-//   bun packages/worker/setup.ts --service-url https://aznex.up.railway.app --api-key axk_…
-//   bun packages/worker/setup.ts --uninstall
+//   aznex-worker setup --service-url https://aznex.up.railway.app --api-key axk_…
+//   aznex-worker setup --uninstall
 //
 // Does four things: validates the service URL + API key against the live
 // service, writes ~/.aznex/config.json (0600 — the daemon can't see shell
@@ -14,15 +14,11 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync, chmodSync } from "f
 import { createInterface } from "readline/promises";
 import { CONFIG_PATH } from "./src/config.js";
 import { mergeClaudeSettings } from "./src/claude-settings.js";
+import { findClaude } from "./src/extract.js";
 import { installDaemon, uninstallDaemon } from "./daemon/install.js";
 import { LOG_FILE } from "./daemon/templates.js";
 
 const CLAUDE_SETTINGS = join(homedir(), ".claude", "settings.json");
-
-function flag(name: string): string | undefined {
-  const i = process.argv.indexOf(`--${name}`);
-  return i >= 0 ? process.argv[i + 1] : undefined;
-}
 
 async function ask(question: string): Promise<string> {
   const rl = createInterface({ input: process.stdin, output: process.stdout });
@@ -41,17 +37,31 @@ async function validate(serviceUrl: string, apiKey: string): Promise<void> {
   if (!authed.ok) throw new Error(`API key check failed: ${authed.status}`);
 }
 
-if (import.meta.main) {
-  if (process.argv.includes("--uninstall")) {
+export async function runSetup(args: string[]): Promise<void> {
+  const flag = (name: string): string | undefined => {
+    const i = args.indexOf(`--${name}`);
+    return i >= 0 ? args[i + 1] : undefined;
+  };
+
+  if (args.includes("--uninstall")) {
     console.log(`daemon removed: ${uninstallDaemon()}`);
     console.log(`(kept ${CONFIG_PATH} and Claude hooks — delete manually if wanted)`);
-    process.exit(0);
+    return;
+  }
+
+  // Extraction spawns the local `claude` binary — fail setup loudly now rather
+  // than have the daemon silently produce nothing later.
+  try {
+    findClaude();
+  } catch {
+    console.error("✗ `claude` executable not found. Install Claude Code first (or set CLAUDE_CODE_PATH).");
+    process.exit(1);
   }
 
   const serviceUrl = (flag("service-url") ?? (await ask("Aznex service URL: "))).replace(/\/+$/, "");
   const apiKey = flag("api-key") ?? (await ask("API key (axk_…): "));
   if (!serviceUrl || !apiKey) {
-    console.error("usage: setup.ts --service-url <url> --api-key <axk_…>");
+    console.error("usage: aznex-worker setup --service-url <url> --api-key <axk_…>");
     process.exit(1);
   }
 
@@ -73,6 +83,8 @@ if (import.meta.main) {
   console.log(`  ${unit} (logs: ${LOG_FILE})`);
 
   console.log(`→ wiring Claude Code hooks in ${CLAUDE_SETTINGS}`);
+  // Absolute bun path + absolute script path: hooks and daemons run without
+  // your shell PATH, and this works from a global npm/bun install or a clone.
   const hookScript = join(dirname(new URL(import.meta.url).pathname), "hooks", "claude-code-hook.ts");
   const hookCommand = `${process.execPath} ${hookScript}`;
   const existing = existsSync(CLAUDE_SETTINGS)
@@ -97,3 +109,5 @@ For reads (any MCP-capable agent):
   Codex / other agents: point their MCP config at ${serviceUrl}/mcp with the same Authorization header.
 `);
 }
+
+if (import.meta.main) await runSetup(process.argv.slice(2));
