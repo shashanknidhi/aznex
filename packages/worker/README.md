@@ -8,12 +8,20 @@ Hooks always return immediately — payloads are queued on `POST /hook` and proc
 
 ## Developer install (no repo clone needed)
 
+One command — installs Bun if missing, installs this package, runs setup:
+
+```sh
+curl -fsSL https://<your-app>.up.railway.app/install.sh | bash -s -- --api-key axk_…
+```
+
+Or manually with [Bun](https://bun.sh) already installed:
+
 ```sh
 bun install -g @aznex/worker
 aznex-worker setup --service-url https://<your-app>.up.railway.app --api-key axk_…
 ```
 
-Prereqs: [Bun](https://bun.sh) and Claude Code. Setup validates the URL + key
+Prereq either way: Claude Code. Setup validates the URL + key
 against the live service, writes `~/.aznex/config.json` (0600 — the daemon
 reads this, since launchd/systemd don't see your shell env), installs the
 login daemon, wires the Claude Code capture hooks globally in

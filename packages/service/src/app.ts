@@ -31,6 +31,15 @@ export function createApp(
 
   app.get("/health", (c) => c.json({ ok: true, version: pkg.version }));
 
+  // Developer one-liner: curl -fsSL <url>/install.sh | bash -s -- --api-key …
+  // The script is templated with this deployment's public URL so devs never
+  // type it. Unauthenticated by design — it contains no secrets.
+  app.get("/install.sh", async (c) => {
+    const script = await Bun.file(new URL("./install.sh", import.meta.url).pathname).text();
+    const origin = process.env["AZNEX_BASE_URL"] ?? new URL(c.req.url).origin;
+    return c.text(script.replaceAll("__SERVICE_URL__", origin.replace(/\/+$/, "")));
+  });
+
   // Route groups — handlers registered by their respective issues.
   const v1 = new Hono<AppEnv>();
   registerIngestRoutes(v1); // #12 POST /v1/ingest
