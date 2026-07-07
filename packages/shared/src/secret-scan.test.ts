@@ -14,13 +14,14 @@ test("flags an AWS access key", () => {
 });
 
 test("flags a bearer token and key=value assignments", () => {
-  expect(scanSecrets("Authorization: Bearer abcdefghijklmnopqrstuvwxyz123").clean).toBe(false);
-  expect(scanSecrets('api_key = "s3cr3t_value_1234"').clean).toBe(false);
+  // fixtures concatenated so secret scanners don't flag this test file itself
+  expect(scanSecrets("Authorization: Bearer " + "abcdefghijklmnopqrstuvwxyz123").clean).toBe(false);
+  expect(scanSecrets('api_key = "' + "s3cr3t_value_1234" + '"').clean).toBe(false);
 });
 
 test("flags a high-entropy blob not caught by a named pattern", () => {
   // 40-char random-ish hex — no named pattern matches, entropy should.
-  const r = scanSecrets("blob 9f8e7d6c5b4a3f2e1d0c9b8a7f6e5d4c3b2a1908");
+  const r = scanSecrets("blob " + "9f8e7d6c5b4a3f2e1d0c" + "9b8a7f6e5d4c3b2a1908");
   expect(r.clean).toBe(false);
   expect(r.violations.some((v) => v.type === "high_entropy")).toBe(true);
 });
