@@ -1,5 +1,5 @@
 import { join } from "path";
-import { tmpdir } from "os";
+import { tmpdir, homedir } from "os";
 import { writeFileSync, existsSync, rmSync } from "fs";
 import { execSync } from "child_process";
 import { MemorySchema, type Memory } from "@aznex/shared";
@@ -22,20 +22,36 @@ export interface ExtractionContext {
 // Runner is injectable so tests never spawn a real Claude process.
 export type ExtractionRunner = (promptPath: string, observationsPath: string) => Promise<string>;
 
-export function findClaude(): string {
-  // env (CLAUDE_CODE_PATH) → ~/.aznex/config.json (written by setup) → PATH.
-  // The config-file step matters for the daemon: launchd/systemd run with a
-  // minimal PATH where `which claude` fails even though the shell finds it.
-  const configured = loadWorkerConfig().claudePath;
-  if (configured) {
-    if (!existsSync(configured)) throw new Error(`configured claude path not found: ${configured}`);
-    return configured;
+// Resolution order (daemon-safe, per claude-mem's hard-won lessons):
+//   1. CLAUDE_CODE_PATH env — explicit override, fails LOUD if wrong
+//   2. ~/.aznex/config.json path persisted by setup — falls through if stale
+//      (Claude Code updates can move the binary; don't brick the pipeline)
+//   3. `which claude` — works in shells, usually not under launchd/systemd
+//   4. known install locations that daemons' minimal PATH never includes
+// ponytail: no capability probing / version ranking (claude-mem does both);
+// add if stale-CLI selection ever bites the pilot.
+const KNOWN_CLAUDE_LOCATIONS = [
+  join(homedir(), ".local", "bin", "claude"), // native installer symlink
+  join(homedir(), ".claude", "local", "claude"), // legacy local install
+];
+
+export function findClaude(configPath?: string): string {
+  const env = process.env["CLAUDE_CODE_PATH"];
+  if (env) {
+    if (!existsSync(env)) throw new Error(`CLAUDE_CODE_PATH set but not found: ${env}`);
+    return env;
   }
+  const configured = loadWorkerConfig(configPath).claudePath;
+  if (configured && existsSync(configured)) return configured;
   try {
     return execSync("which claude", { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }).trim();
   } catch {
-    throw new Error("claude executable not found. Install Claude Code or set CLAUDE_CODE_PATH.");
+    // daemon PATH miss — fall through to fixed locations
   }
+  for (const candidate of KNOWN_CLAUDE_LOCATIONS) {
+    if (existsSync(candidate)) return candidate;
+  }
+  throw new Error("claude executable not found. Install Claude Code or set CLAUDE_CODE_PATH.");
 }
 
 const defaultRunner: ExtractionRunner = async (promptPath, observationsPath) => {
