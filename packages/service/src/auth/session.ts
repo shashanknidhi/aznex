@@ -11,6 +11,12 @@ import { UserRepository } from "../repositories/user.js";
 // The aznex `user` table stays the source of truth for authorship — a
 // better-auth session is mapped to it via the github account id.
 
+// Browser login needs a configured GitHub OAuth app; without one we skip the
+// provider entirely (tests use email/password testMode; the bootstrap warns).
+export function githubOAuthConfigured(): boolean {
+  return Boolean(process.env["GITHUB_OAUTH_CLIENT_ID"] && process.env["GITHUB_OAUTH_CLIENT_SECRET"]);
+}
+
 export function createAuth(db: Database, opts?: { testMode?: boolean }) {
   return betterAuth({
     database: db,
@@ -26,14 +32,16 @@ export function createAuth(db: Database, opts?: { testMode?: boolean }) {
     verification: { modelName: "auth_verification" },
     // testMode lets tests mint sessions without a live GitHub OAuth roundtrip.
     emailAndPassword: { enabled: opts?.testMode ?? false },
-    socialProviders: {
-      github: {
-        clientId: process.env["GITHUB_OAUTH_CLIENT_ID"] ?? "",
-        clientSecret: process.env["GITHUB_OAUTH_CLIENT_SECRET"] ?? "",
-        // user.name carries the GitHub login — repo permission checks key on it.
-        mapProfileToUser: (profile) => ({ name: profile.login }),
-      },
-    },
+    socialProviders: githubOAuthConfigured()
+      ? {
+          github: {
+            clientId: process.env["GITHUB_OAUTH_CLIENT_ID"]!,
+            clientSecret: process.env["GITHUB_OAUTH_CLIENT_SECRET"]!,
+            // user.name carries the GitHub login — repo permission checks key on it.
+            mapProfileToUser: (profile) => ({ name: profile.login }),
+          },
+        }
+      : {},
   });
 }
 export type Auth = ReturnType<typeof createAuth>;

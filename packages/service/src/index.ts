@@ -41,11 +41,14 @@ if (import.meta.main) {
   const { openDatabase } = await import('./db/connection.js');
   const { createApp } = await import('./app.js');
   const { loadConfig } = await import('./config.js');
-  const { createAuth, migrateAuthSchema } = await import('./auth/session.js');
+  const { createAuth, migrateAuthSchema, githubOAuthConfigured } = await import('./auth/session.js');
   const config = loadConfig();
   const db = openDatabase();
   const auth = createAuth(db);
   await migrateAuthSchema(auth);
+  if (!githubOAuthConfigured()) {
+    console.warn('GITHUB_OAUTH_CLIENT_ID / GITHUB_OAUTH_CLIENT_SECRET not set — browser login is disabled (API keys still work)');
+  }
   // Serve the built frontend when present (production/Docker); absent in dev,
   // where the Vite dev server proxies /api instead.
   const { existsSync } = await import('fs');
