@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-**Aznex** — team-shared institutional memory for coding agents. Repo-scoped, agent-agnostic, MCP-served. See `.idea/v0/aznex-prd.md` and `.idea/v0/aznex-technical-design.md` for the full product and technical spec.
+**Aznex** — team-shared institutional memory for coding agents. Repo-scoped, agent-agnostic, MCP-served. The README covers the product and architecture; `docs/data-lifecycle.md` covers entity state machines.
 
 Inspired by and architecturally modelled after [claude-mem](https://github.com/thedotmack/claude-mem).
 
