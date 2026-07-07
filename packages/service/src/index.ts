@@ -5,6 +5,9 @@
 //   /api              — frontend read/query API
 // This is the only tier with database credentials.
 
+export { createApp } from './app.js';
+export type { AppEnv } from './app.js';
+export { loadConfig } from './config.js';
 export { openDatabase } from './db/connection.js';
 export { ensureSchema } from './db/schema.js';
 export { runMigrations } from './db/migrations.js';
@@ -31,3 +34,15 @@ export type {
   IMemoryAnchorRepository,
   IAgentEventRepository,
 } from './repositories/interfaces.js';
+
+// ── Bootstrap ────────────────────────────────────────────────────────────────
+// Only start the server when run directly (`bun src/index.ts`), not when imported.
+if (import.meta.main) {
+  const { openDatabase } = await import('./db/connection.js');
+  const { createApp } = await import('./app.js');
+  const { loadConfig } = await import('./config.js');
+  const config = loadConfig();
+  const app = createApp(openDatabase());
+  console.log(`@aznex/service listening on :${config.port}`);
+  Bun.serve({ port: config.port, fetch: app.fetch });
+}
