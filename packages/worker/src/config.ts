@@ -12,10 +12,11 @@ export interface WorkerConfig {
   serviceUrl: string | null;
   apiKey: string | null;
   workerPort: number;
+  claudePath: string | null;
 }
 
 export function loadWorkerConfig(configPath = CONFIG_PATH): WorkerConfig {
-  let file: { serviceUrl?: string; apiKey?: string; workerPort?: number } = {};
+  let file: { serviceUrl?: string; apiKey?: string; workerPort?: number; claudePath?: string } = {};
   if (existsSync(configPath)) {
     try {
       file = JSON.parse(readFileSync(configPath, "utf-8"));
@@ -27,5 +28,6 @@ export function loadWorkerConfig(configPath = CONFIG_PATH): WorkerConfig {
     serviceUrl: process.env["AZNEX_SERVICE_URL"] ?? file.serviceUrl ?? null,
     apiKey: process.env["AZNEX_API_KEY"] ?? file.apiKey ?? null,
     workerPort: Number(process.env["AZNEX_WORKER_PORT"] ?? file.workerPort ?? 3001),
+    claudePath: process.env["CLAUDE_CODE_PATH"] ?? file.claudePath ?? null,
   };
 }

@@ -15,9 +15,10 @@ function tmpConfig(content: string): string {
 test("config file supplies values when env is unset", () => {
   delete process.env["AZNEX_SERVICE_URL"];
   delete process.env["AZNEX_API_KEY"];
-  const path = tmpConfig(JSON.stringify({ serviceUrl: "https://svc", apiKey: "axk_x", workerPort: 4000 }));
+  delete process.env["CLAUDE_CODE_PATH"];
+  const path = tmpConfig(JSON.stringify({ serviceUrl: "https://svc", apiKey: "axk_x", workerPort: 4000, claudePath: "/opt/claude" }));
   const cfg = loadWorkerConfig(path);
-  expect(cfg).toEqual({ serviceUrl: "https://svc", apiKey: "axk_x", workerPort: 4000 });
+  expect(cfg).toEqual({ serviceUrl: "https://svc", apiKey: "axk_x", workerPort: 4000, claudePath: "/opt/claude" });
 });
 
 test("env vars win over the config file", () => {
@@ -29,7 +30,7 @@ test("env vars win over the config file", () => {
 
 test("missing or malformed config file degrades to nulls and default port", () => {
   const missing = loadWorkerConfig("/nonexistent/config.json");
-  expect(missing).toEqual({ serviceUrl: null, apiKey: null, workerPort: 3001 });
+  expect(missing).toEqual({ serviceUrl: null, apiKey: null, workerPort: 3001, claudePath: null });
   const malformed = loadWorkerConfig(tmpConfig("not json{"));
   expect(malformed.serviceUrl).toBe(null);
 });

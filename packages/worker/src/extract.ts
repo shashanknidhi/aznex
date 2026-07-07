@@ -4,6 +4,7 @@ import { writeFileSync, existsSync, rmSync } from "fs";
 import { execSync } from "child_process";
 import { MemorySchema, type Memory } from "@aznex/shared";
 import type { RawObservation } from "./compress.js";
+import { loadWorkerConfig } from "./config.js";
 
 // LLM extraction stage (#19). Distills raw_observation records into typed
 // memories via the Claude Agent SDK pattern: spawn the local `claude` binary
@@ -22,10 +23,13 @@ export interface ExtractionContext {
 export type ExtractionRunner = (promptPath: string, observationsPath: string) => Promise<string>;
 
 export function findClaude(): string {
-  const envPath = process.env["CLAUDE_CODE_PATH"];
-  if (envPath) {
-    if (!existsSync(envPath)) throw new Error(`CLAUDE_CODE_PATH set but not found: ${envPath}`);
-    return envPath;
+  // env (CLAUDE_CODE_PATH) → ~/.aznex/config.json (written by setup) → PATH.
+  // The config-file step matters for the daemon: launchd/systemd run with a
+  // minimal PATH where `which claude` fails even though the shell finds it.
+  const configured = loadWorkerConfig().claudePath;
+  if (configured) {
+    if (!existsSync(configured)) throw new Error(`configured claude path not found: ${configured}`);
+    return configured;
   }
   try {
     return execSync("which claude", { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }).trim();
