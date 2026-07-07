@@ -62,9 +62,11 @@ export interface IMemoryRepository {
   create(input: CreateMemory): Memory;
   getById(id: string): Memory | null;
   update(id: string, input: Partial<CreateMemory>): Memory | null;
-  listByRepo(repoFingerprint: string, limit?: number, filter?: MemoryFilter): Memory[];
+  listByRepo(repoFingerprint: string, limit?: number, filter?: MemoryFilter, offset?: number): Memory[];
+  countByRepo(repoFingerprint: string, filter?: MemoryFilter): number;
   listBySession(sessionId: string): Memory[];
-  search(repoFingerprint: string, query: string, limit?: number, filter?: MemoryFilter): Memory[];
+  search(repoFingerprint: string, query: string, limit?: number, filter?: MemoryFilter, offset?: number): Memory[];
+  countSearch(repoFingerprint: string, query: string, filter?: MemoryFilter): number;
   setFreshness(id: string, state: FreshnessState): void;
   setPromotion(id: string, state: PromotionState): void;
 }
