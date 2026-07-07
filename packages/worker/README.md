@@ -59,18 +59,6 @@ Add to your project's `.claude/settings.json`:
 
 Claude Code pipes the hook event JSON to the script's stdin; the script forwards it to the worker with a 2-second timeout and always exits 0, so a stopped worker never stalls the agent. Set `AZNEX_WORKER_URL` / `AZNEX_WORKER_TOKEN` in your shell (or inline in the hook `command`) if the defaults don't fit.
 
-## One-command developer setup
-
-```sh
-bun packages/worker/setup.ts --service-url https://<your-app>.up.railway.app --api-key axk_…
-```
-
-Validates the URL + key against the live service, writes `~/.aznex/config.json`
-(0600 — the daemon reads this, since launchd/systemd don't see your shell env),
-installs the login daemon, wires the Claude Code capture hooks globally in
-`~/.claude/settings.json`, and prints the MCP command for reads.
-`--uninstall` removes the daemon.
-
 ## Run as a daemon
 
 ```sh
