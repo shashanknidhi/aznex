@@ -365,6 +365,14 @@ export default function App() {
           <Route path="/" element={<RequireAuth><RepoSelect /></RequireAuth>} />
           <Route path="/repo/:fingerprint" element={<RequireAuth><MemoryList /></RequireAuth>} />
           <Route path="/memory/:id" element={<RequireAuth><MemoryView /></RequireAuth>} />
+          <Route
+            path="*"
+            element={
+              <p className="error">
+                Page not found: <code>{window.location.pathname}</code> — <Link to="/">go to repositories</Link>
+              </p>
+            }
+          />
         </Routes>
       </main>
     </BrowserRouter>
