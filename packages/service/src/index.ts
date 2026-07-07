@@ -46,7 +46,11 @@ if (import.meta.main) {
   const db = openDatabase();
   const auth = createAuth(db);
   await migrateAuthSchema(auth);
-  const app = createApp(db, { auth });
+  // Serve the built frontend when present (production/Docker); absent in dev,
+  // where the Vite dev server proxies /api instead.
+  const { existsSync } = await import('fs');
+  const distDir = new URL('../../frontend/dist', import.meta.url).pathname;
+  const app = createApp(db, { auth, staticDir: existsSync(distDir) ? distDir : undefined });
   console.log(`@aznex/service listening on :${config.port}`);
   Bun.serve({ port: config.port, fetch: app.fetch });
 }

@@ -2,7 +2,7 @@ FROM oven/bun:1 AS base
 WORKDIR /app
 
 # Install dependencies — all workspace manifests must be present for the
-# lockfile to resolve, even though only shared+service ship in the image.
+# lockfile to resolve.
 COPY package.json bun.lock bunfig.toml ./
 COPY packages/shared/package.json ./packages/shared/
 COPY packages/service/package.json ./packages/service/
@@ -13,7 +13,11 @@ RUN bun install --frozen-lockfile
 # Copy source
 COPY packages/shared ./packages/shared
 COPY packages/service ./packages/service
+COPY packages/frontend ./packages/frontend
 COPY tsconfig.json ./
+
+# Build the SPA; the service serves packages/frontend/dist same-origin.
+RUN bun run --cwd packages/frontend build
 
 EXPOSE 3000
 
