@@ -33,8 +33,35 @@ async function gitHead(cwd: string): Promise<string | null> {
   }
 }
 
+const ONBOARDED_TTL_MS = 5 * 60_000;
+
 export function createPipeline(deps: PipelineDeps = {}) {
   const sessions = new Map<string, SessionBuffer>();
+  const onboarded = { fingerprints: new Set<string>(), fetchedAtMs: 0, everFetched: false };
+
+  // Gate BEFORE extraction: LLM calls for repos the service will 403 anyway
+  // are pure quota burn (hooks are global — every session on the machine
+  // fires them). Fails open when the list can't be fetched.
+  async function isOnboarded(fingerprint: string, serviceUrl: string, apiKey: string): Promise<boolean> {
+    const doFetch = deps.ingest?.fetchImpl ?? fetch;
+    if (Date.now() - onboarded.fetchedAtMs > ONBOARDED_TTL_MS) {
+      try {
+        const res = await doFetch(`${serviceUrl}/api/repos`, {
+          headers: { Authorization: `Bearer ${apiKey}` },
+        });
+        if (res.ok) {
+          const { repos } = (await res.json()) as { repos: { fingerprint: string }[] };
+          onboarded.fingerprints = new Set(repos.map((r) => r.fingerprint));
+          onboarded.fetchedAtMs = Date.now();
+          onboarded.everFetched = true;
+        }
+      } catch {
+        // service unreachable — fall through to fail-open below
+      }
+    }
+    if (!onboarded.everFetched) return true; // never got a list: don't block capture
+    return onboarded.fingerprints.has(fingerprint);
+  }
 
   async function finalizeSession(sessionId: string): Promise<void> {
     const buffer = sessions.get(sessionId);
@@ -44,6 +71,18 @@ export function createPipeline(deps: PipelineDeps = {}) {
     const fingerprint = await computeRepoFingerprint(buffer.cwd);
     if (!fingerprint) {
       console.warn(`session ${sessionId}: no resolvable git remote in ${buffer.cwd} — skipping ingest`);
+      return;
+    }
+
+    const config = loadWorkerConfig();
+    const serviceUrl = deps.ingest?.serviceUrl ?? config.serviceUrl;
+    const apiKey = deps.ingest?.apiKey ?? config.apiKey;
+    if (!serviceUrl || !apiKey) {
+      console.warn(`session ${sessionId} (${fingerprint}): service URL / API key not configured — skipping extraction`);
+      return;
+    }
+    if (!(await isOnboarded(fingerprint, serviceUrl, apiKey))) {
+      console.log(`session ${sessionId} (${fingerprint}): repo not onboarded — skipping extraction`);
       return;
     }
 
@@ -73,14 +112,6 @@ export function createPipeline(deps: PipelineDeps = {}) {
     }
     if (ingestMemories.length === 0) return;
 
-    const config = loadWorkerConfig();
-    const serviceUrl = deps.ingest?.serviceUrl ?? config.serviceUrl;
-    const apiKey = deps.ingest?.apiKey ?? config.apiKey;
-    if (!serviceUrl || !apiKey) {
-      console.warn("service URL / API key not configured (env or ~/.aznex/config.json) — extracted memories dropped");
-      return;
-    }
-
     // fingerprint is host/owner/name; canonical display form is owner/name.
     const request: IngestRequest = {
       repo_fingerprint: fingerprint,
@@ -93,8 +124,13 @@ export function createPipeline(deps: PipelineDeps = {}) {
       },
       memories: ingestMemories,
     };
-    const response = await postIngest(request, { ...deps.ingest, serviceUrl, apiKey });
-    console.log(`session ${sessionId}: ingested ${response.accepted} memories (${response.rejected.length} rejected)`);
+    try {
+      const response = await postIngest(request, { ...deps.ingest, serviceUrl, apiKey });
+      console.log(`session ${sessionId} (${fingerprint}): ingested ${response.accepted} memories (${response.rejected.length} rejected)`);
+    } catch (err) {
+      // Named context: an anonymous "payload dropped" cost real debugging time.
+      console.warn(`session ${sessionId} (${fingerprint}): ingest failed — ${err instanceof Error ? err.message : err}`);
+    }
   }
 
   return async function processHookPayload(payload: HookPayload): Promise<void> {
