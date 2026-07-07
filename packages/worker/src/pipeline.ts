@@ -4,6 +4,7 @@ import { compressToolEvent, type RawObservation, type ToolEvent } from "./compre
 import { extractMemories, type ExtractionRunner } from "./extract.js";
 import { scrubContent } from "./scrub.js";
 import { postIngest, type IngestClientOptions } from "./ingest-client.js";
+import { loadWorkerConfig } from "./config.js";
 
 // Full write pipeline (#16, #18–#21): PostToolUse events are compressed and
 // buffered per session; Stop triggers extract → scrub → POST /v1/ingest.
@@ -72,10 +73,11 @@ export function createPipeline(deps: PipelineDeps = {}) {
     }
     if (ingestMemories.length === 0) return;
 
-    const serviceUrl = deps.ingest?.serviceUrl ?? process.env["AZNEX_SERVICE_URL"];
-    const apiKey = deps.ingest?.apiKey ?? process.env["AZNEX_API_KEY"];
+    const config = loadWorkerConfig();
+    const serviceUrl = deps.ingest?.serviceUrl ?? config.serviceUrl;
+    const apiKey = deps.ingest?.apiKey ?? config.apiKey;
     if (!serviceUrl || !apiKey) {
-      console.warn("AZNEX_SERVICE_URL / AZNEX_API_KEY not set — extracted memories dropped");
+      console.warn("service URL / API key not configured (env or ~/.aznex/config.json) — extracted memories dropped");
       return;
     }
 

@@ -1,5 +1,6 @@
 import { HookQueue, type HookPayload } from "./queue.js";
 import { processHookPayload } from "./pipeline.js";
+import { loadWorkerConfig } from "./config.js";
 
 export interface WorkerServer {
   server: ReturnType<typeof Bun.serve>;
@@ -14,7 +15,7 @@ export function startWorkerServer(opts?: {
   const queue = new HookQueue(opts?.process ?? processHookPayload);
 
   const server = Bun.serve({
-    port: opts?.port ?? Number(process.env["AZNEX_WORKER_PORT"] ?? 3001),
+    port: opts?.port ?? loadWorkerConfig().workerPort,
     async fetch(req) {
       const url = new URL(req.url);
       if (req.method === "GET" && url.pathname === "/health") {

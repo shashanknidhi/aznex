@@ -6,6 +6,18 @@ Receives lifecycle hook payloads from a coding agent (Claude Code, Codex, etc.),
 
 Hooks always return immediately — payloads are queued on `POST /hook` and processed by an async drain loop, so the agent/IDE never waits on processing.
 
+## One-command developer setup
+
+```sh
+bun packages/worker/setup.ts --service-url https://<your-app>.up.railway.app --api-key axk_…
+```
+
+Validates the URL + key against the live service, writes `~/.aznex/config.json`
+(0600 — the daemon reads this, since launchd/systemd don't see your shell env),
+installs the login daemon, wires the Claude Code capture hooks globally in
+`~/.claude/settings.json`, and prints the MCP command for reads.
+`--uninstall` removes the daemon.
+
 ## Run
 
 ```sh
