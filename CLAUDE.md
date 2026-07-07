@@ -37,7 +37,7 @@ docker/
   docker-compose.yml
 ```
 
-Each package has `src/index.ts` as its entry point and its own `tsconfig.json` extending the root.
+Each package has its own `tsconfig.json` extending the root. `shared`, `worker`, and `service` enter at `src/index.ts`; the frontend enters at `src/main.tsx` via `index.html`.
 
 ## Commands
 
@@ -66,7 +66,7 @@ Every non-trivial function (a branch, a parser, a data transformation, anything 
 Two trust zones: **developer machine** (untrusted clients) and **remote server** (trusted tier).
 
 - `@aznex/service` is the **only** component with database credentials. Every read/write passes through it.
-- `@aznex/worker` runs as a **persistent background daemon** on each developer's machine. It receives agent hooks, runs LLM extraction via the **Claude Agent SDK using the developer's own Claude subscription** (no separate API key needed), scrubs secrets, then POSTs only the final structured memory to the service. Raw tool I/O never leaves the machine. The active agent session is completely unaware of this — it just fires hooks.
+- `@aznex/worker` runs as a **persistent background daemon** on each developer's machine. It receives agent hooks, runs LLM extraction by **spawning the developer's local Claude Code CLI (their own subscription — no separate API key)**, scrubs secrets, then POSTs only the final structured memory to the service. Raw tool I/O never leaves the machine. The active agent session is completely unaware of this — it just fires hooks.
 - The service is a **dumb authenticated store** for writes — it validates, re-scans for secrets, and persists. All extraction intelligence lives in the worker.
 - Reads (MCP) are agent-agnostic. Capture requires thin per-agent hooks (asymmetry is intentional).
 - All memory is keyed by `repo_fingerprint`. The service verifies the caller's access to that repo against the git host on every request — this is the load-bearing security step.
@@ -75,7 +75,7 @@ Two trust zones: **developer machine** (untrusted clients) and **remote server**
 ### Data flow
 
 ```
-Write: agent --hooks--> worker [compress → Claude Agent SDK extract (local) → scrub] --POST /v1/ingest (structured memory only)--> service [auth+re-scan+persist] --> DB
+Write: agent --hooks--> worker [compress → extract via local Claude CLI → scrub] --POST /v1/ingest (structured memory only)--> service [auth+re-scan+persist] --> DB
 Read:  agent --MCP query--> service [auth+verify] --> DB --> agent
 ```
 
@@ -105,6 +105,6 @@ Read:  agent --MCP query--> service [auth+verify] --> DB --> agent
 - **Repo fingerprint ≠ local path** — the fingerprint must resolve to a canonical git-host identity (`host/owner/name`) so server-side permission checks can run. Local paths differ per developer and drift.
 - **`promotion_state = private` default** — captured memory is author-private until explicitly promoted to `team_shared`. Only `team_shared` records are returned by team reads.
 - **Hooks must return immediately** — all heavy worker processing (LLM extraction, scrubbing) is async; hooks enqueue and return so the IDE never stalls.
-- **Worker owns the full write pipeline; active session is passive** — the active Claude session fires hooks and nothing else. The background worker handles extraction (via Claude Agent SDK, user's own subscription), scrubbing, and POSTing to the service. This keeps the active session lean and makes capture automatic with no developer effort.
+- **Worker owns the full write pipeline; active session is passive** — the active Claude session fires hooks and nothing else. The background worker handles extraction (spawning the local Claude Code CLI on the user's own subscription), scrubbing, and POSTing to the service. This keeps the active session lean and makes capture automatic with no developer effort.
 - **Service is a dumb store on the write path** — extraction intelligence stays in the worker. The service only validates auth, re-scans for secrets, and persists. No LLM calls server-side.
 - **Worker must run as a daemon** — needs auto-start on login and crash recovery (`launchd` on macOS, `systemd` on Linux). This is the main local infra burden for the worker package.

@@ -53,15 +53,20 @@ bun run --cwd packages/worker dev   # starts on :3001 (AZNEX_WORKER_PORT to chan
 
 ## Environment
 
+Env vars win over `~/.aznex/config.json` (written by setup); the daemon reads
+the file since it never sees your shell env.
+
 | Variable | Default | Purpose |
 |---|---|---|
-| `AZNEX_WORKER_PORT` | `3001` | Port the worker listens on |
+| `AZNEX_WORKER_PORT` | `3001` | Port the worker listens on (loopback only) |
 | `AZNEX_WORKER_URL` | `http://localhost:3001` | Where hook scripts send events |
-| `AZNEX_WORKER_TOKEN` | — | Optional bearer token forwarded by hook scripts |
+| `AZNEX_SERVICE_URL` | from config file | Remote service to POST memories to |
+| `AZNEX_API_KEY` | from config file | Bearer key for `/v1/ingest` |
 
 ## Claude Code hook setup
 
-Add to your project's `.claude/settings.json`:
+`aznex-worker setup` wires this automatically into your global
+`~/.claude/settings.json`. For a manual/per-project install instead, add:
 
 ```json
 {
@@ -84,7 +89,7 @@ Add to your project's `.claude/settings.json`:
 }
 ```
 
-Claude Code pipes the hook event JSON to the script's stdin; the script forwards it to the worker with a 2-second timeout and always exits 0, so a stopped worker never stalls the agent. Set `AZNEX_WORKER_URL` / `AZNEX_WORKER_TOKEN` in your shell (or inline in the hook `command`) if the defaults don't fit.
+Claude Code pipes the hook event JSON to the script's stdin; the script forwards it to the worker with a 2-second timeout and always exits 0, so a stopped worker never stalls the agent. Set `AZNEX_WORKER_URL` in your shell (or inline in the hook `command`) if the default doesn't fit.
 
 ## Run as a daemon
 

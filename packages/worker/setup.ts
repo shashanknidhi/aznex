@@ -34,7 +34,7 @@ async function validate(serviceUrl: string, apiKey: string): Promise<void> {
   const authed = await fetch(`${serviceUrl}/api/repos`, {
     headers: { Authorization: `Bearer ${apiKey}` },
   });
-  if (authed.status === 401) throw new Error("API key rejected (401) — ask your admin for a fresh key");
+  if (authed.status === 401) throw new Error("API key rejected (401) — re-run setup to authorize this device again");
   if (!authed.ok) throw new Error(`API key check failed: ${authed.status}`);
 }
 
@@ -118,8 +118,7 @@ export async function runSetup(args: string[]): Promise<void> {
 
 For reads (any MCP-capable agent):
   Claude Code:
-    claude mcp add aznex --transport http ${serviceUrl}/mcp --header "Authorization: Bearer ${apiKey.slice(0, 8)}…"
-    (use your full key)
+    claude mcp add aznex --transport http ${serviceUrl}/mcp --header "Authorization: Bearer ${apiKey}"
   Codex / other agents: point their MCP config at ${serviceUrl}/mcp with the same Authorization header.
 `);
 }

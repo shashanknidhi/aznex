@@ -5,16 +5,12 @@
 
 export async function forwardHook(): Promise<void> {
   const workerUrl = process.env["AZNEX_WORKER_URL"] ?? "http://localhost:3001";
-  const token = process.env["AZNEX_WORKER_TOKEN"];
 
   const body = await Bun.stdin.text();
   try {
     await fetch(`${workerUrl}/hook`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
+      headers: { "Content-Type": "application/json" },
       body,
       signal: AbortSignal.timeout(2000),
     });

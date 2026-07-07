@@ -15,6 +15,8 @@ export function startWorkerServer(opts?: {
   const queue = new HookQueue(opts?.process ?? processHookPayload);
 
   const server = Bun.serve({
+    // Local capture surface only — never expose /hook to the network.
+    hostname: "127.0.0.1",
     port: opts?.port ?? loadWorkerConfig().workerPort,
     async fetch(req) {
       const url = new URL(req.url);

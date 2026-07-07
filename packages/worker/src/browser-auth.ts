@@ -34,6 +34,7 @@ export async function browserAuth(serviceUrl: string, opts: BrowserAuthOpts = {}
   });
 
   const server = Bun.serve({
+    hostname: "127.0.0.1", // one-time code must only be receivable locally
     port: 0,
     fetch(req) {
       const url = new URL(req.url);
