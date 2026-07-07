@@ -22,7 +22,10 @@ export interface ExtractionContext {
 // Runner is injectable so tests never spawn a real Claude process.
 export type ExtractionRunner = (promptPath: string, observationsPath: string) => Promise<string>;
 
-// Resolution order (daemon-safe, per claude-mem's hard-won lessons):
+// Resolution order — adapted from claude-mem's battle-tested resolver
+// (https://github.com/thedotmack/claude-mem, src/shared/find-claude-executable.ts),
+// which documents this exact daemon failure mode: "may not be on the worker's
+// PATH at all depending on how the daemon was spawned".
 //   1. CLAUDE_CODE_PATH env — explicit override, fails LOUD if wrong
 //   2. ~/.aznex/config.json path persisted by setup — falls through if stale
 //      (Claude Code updates can move the binary; don't brick the pipeline)
@@ -30,6 +33,7 @@ export type ExtractionRunner = (promptPath: string, observationsPath: string) =>
 //   4. known install locations that daemons' minimal PATH never includes
 // ponytail: no capability probing / version ranking (claude-mem does both);
 // add if stale-CLI selection ever bites the pilot.
+// Known locations list also per claude-mem (native installer + legacy local).
 const KNOWN_CLAUDE_LOCATIONS = [
   join(homedir(), ".local", "bin", "claude"), // native installer symlink
   join(homedir(), ".claude", "local", "claude"), // legacy local install
