@@ -1,0 +1,44 @@
+import { createAuthClient } from "better-auth/react";
+
+export const authClient = createAuthClient({ basePath: "/api/auth" });
+
+export interface MemoryItem {
+  id: string;
+  type: string;
+  title: string | null;
+  content: string;
+  freshness_state: string;
+  author_id: string;
+  created_at_epoch: number;
+}
+
+export interface MemoryDetail extends MemoryItem {
+  narrative: string | null;
+  facts: string[];
+  concepts: string[];
+  metadata: Record<string, unknown>;
+  anchors: { path: string; commit_sha: string | null }[];
+}
+
+export interface RepoInfo {
+  fingerprint: string;
+  canonical: string;
+}
+
+async function get<T>(path: string): Promise<T> {
+  const res = await fetch(path, { credentials: "include" });
+  if (res.status === 401) throw new Error("unauthorized");
+  if (!res.ok) throw new Error(`request failed: ${res.status}`);
+  return (await res.json()) as T;
+}
+
+export const api = {
+  repos: () => get<{ repos: RepoInfo[]; user: { login: string } }>("/api/repos"),
+  memories: (fingerprint: string, opts?: { q?: string; page?: number }) => {
+    const params = new URLSearchParams({ repo_fingerprint: fingerprint });
+    if (opts?.q) params.set("q", opts.q);
+    if (opts?.page) params.set("page", String(opts.page));
+    return get<{ items: MemoryItem[]; total: number; page: number }>(`/api/memories?${params}`);
+  },
+  memory: (id: string) => get<MemoryDetail>(`/api/memories/${encodeURIComponent(id)}`),
+};

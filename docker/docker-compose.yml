@@ -9,7 +9,9 @@ services:
       - aznex-data:/app/data
     environment:
       - DATABASE_PATH=/app/data/aznex.db
-      # - GIT_HOST_TOKEN=<your token>
+      # GitHub App credentials for repo access verification — see .env.example
+      # - GITHUB_APP_ID=
+      # - GITHUB_APP_PRIVATE_KEY=
     restart: unless-stopped
 
 volumes:
