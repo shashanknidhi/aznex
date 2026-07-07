@@ -57,3 +57,17 @@ test("staticDir serves files and falls back to index.html for SPA routes", async
   // traversal outside the dir is refused (falls back to index)
   expect(await (await app.request("/../etc/passwd")).text()).toBe("<html>spa</html>");
 });
+
+test("/install.sh serves a valid bash script with the service URL baked in", async () => {
+  process.env["AZNEX_BASE_URL"] = "https://aznex.example.com";
+  const app = createApp(openDatabase(":memory:"));
+  const res = await app.request("/install.sh");
+  expect(res.status).toBe(200);
+  const script = await res.text();
+  expect(script).toContain('SERVICE_URL="https://aznex.example.com"');
+  expect(script).not.toContain("__SERVICE_URL__");
+  // must be syntactically valid bash
+  const proc = Bun.spawn(["bash", "-n"], { stdin: new TextEncoder().encode(script), stderr: "pipe" });
+  expect(await proc.exited).toBe(0);
+  delete process.env["AZNEX_BASE_URL"];
+});

@@ -6,6 +6,7 @@ import { registerIngestRoutes } from "./routes/ingest.js";
 import { registerMcpRoutes } from "./routes/mcp.js";
 import { registerMemoryRoutes } from "./routes/memories.js";
 import { registerRepoRoutes } from "./routes/repos.js";
+import { registerCliAuthRoutes } from "./routes/cli-auth.js";
 import type { Auth } from "./auth/session.js";
 
 // Context shared across all handlers. `user` is set by the auth middleware (#10).
@@ -31,6 +32,15 @@ export function createApp(
 
   app.get("/health", (c) => c.json({ ok: true, version: pkg.version }));
 
+  // Developer one-liner: curl -fsSL <url>/install.sh | bash -s -- --api-key …
+  // The script is templated with this deployment's public URL so devs never
+  // type it. Unauthenticated by design — it contains no secrets.
+  app.get("/install.sh", async (c) => {
+    const script = await Bun.file(new URL("./install.sh", import.meta.url).pathname).text();
+    const origin = process.env["AZNEX_BASE_URL"] ?? new URL(c.req.url).origin;
+    return c.text(script.replaceAll("__SERVICE_URL__", origin.replace(/\/+$/, "")));
+  });
+
   // Route groups — handlers registered by their respective issues.
   const v1 = new Hono<AppEnv>();
   registerIngestRoutes(v1); // #12 POST /v1/ingest
@@ -47,6 +57,7 @@ export function createApp(
   }
   registerMemoryRoutes(api, auth); // #15 frontend read API
   registerRepoRoutes(api, auth); // #22 repo selector
+  registerCliAuthRoutes(api, auth); // browser login for aznex-worker setup
   app.route("/api", api);
 
   // Production frontend: serve the built SPA (vite dist) from the service so
