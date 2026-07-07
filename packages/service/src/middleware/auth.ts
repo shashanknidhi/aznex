@@ -8,6 +8,19 @@ export function hashToken(token: string): string {
   return new Bun.CryptoHasher("sha256").update(token).digest("hex");
 }
 
+// Deployment-level allowlist (pilot gate). AZNEX_ALLOWED_GITHUB_LOGINS is a
+// comma-separated list of GitHub usernames; unset/empty means open (the
+// self-host default — per-repo GitHub verification still gates all data).
+export function githubLoginAllowed(login: string): boolean {
+  const raw = process.env["AZNEX_ALLOWED_GITHUB_LOGINS"];
+  if (!raw?.trim()) return true;
+  return raw
+    .split(",")
+    .map((l) => l.trim().toLowerCase())
+    .filter(Boolean)
+    .includes(login.toLowerCase());
+}
+
 // Validates `Authorization: Bearer <token>` against the api_key table and attaches
 // the resolved user to the context. On any failure returns a flat 401 that never
 // reveals which check failed (missing header, bad key, expired, revoked, no user).
@@ -26,6 +39,10 @@ export function apiKeyAuth(): MiddlewareHandler<AppEnv> {
 
     const user = new UserRepository(db).getById(key.user_id);
     if (!user) return unauthorized();
+
+    if (!githubLoginAllowed(user.github_login)) {
+      return c.json({ error: "github_login_not_allowed" }, 403);
+    }
 
     new ApiKeyRepository(db).touchLastUsed(key.id, Date.now());
     c.set("user", user);

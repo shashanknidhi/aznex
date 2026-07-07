@@ -49,3 +49,20 @@ test("expired key → 401", async () => {
   const res = await call(appWithKey({ expires: Date.now() - 1000 }), "plaintext-token");
   expect(res.status).toBe(401);
 });
+
+import { githubLoginAllowed } from "./auth.js";
+
+test("allowlist: unset means open, set means exact-match (case-insensitive)", () => {
+  delete process.env["AZNEX_ALLOWED_GITHUB_LOGINS"];
+  expect(githubLoginAllowed("anyone")).toBe(true);
+
+  process.env["AZNEX_ALLOWED_GITHUB_LOGINS"] = "Alice, bob ,carol";
+  expect(githubLoginAllowed("alice")).toBe(true);
+  expect(githubLoginAllowed("BOB")).toBe(true);
+  expect(githubLoginAllowed("mallory")).toBe(false);
+  expect(githubLoginAllowed("ali")).toBe(false);
+
+  process.env["AZNEX_ALLOWED_GITHUB_LOGINS"] = "  ";
+  expect(githubLoginAllowed("anyone")).toBe(true); // blank = unset
+  delete process.env["AZNEX_ALLOWED_GITHUB_LOGINS"];
+});
