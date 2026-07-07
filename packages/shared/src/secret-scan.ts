@@ -8,6 +8,7 @@
 
 export interface SecretViolation {
   offset: number; // index into the ORIGINAL text where the match starts
+  length: number; // length of the matched span (for redaction)
   type: string;
 }
 
@@ -57,19 +58,19 @@ export function scanSecrets(text: string): SecretScanResult {
   const violations: SecretViolation[] = [];
   const seen = new Set<number>(); // dedupe overlapping matches by offset
 
-  const push = (offset: number, type: string) => {
+  const push = (offset: number, length: number, type: string) => {
     if (seen.has(offset)) return;
     seen.add(offset);
-    violations.push({ offset, type });
+    violations.push({ offset, length, type });
   };
 
   for (const { type, re } of PATTERNS) {
-    for (const m of text.matchAll(re)) push(m.index ?? 0, type);
+    for (const m of text.matchAll(re)) push(m.index ?? 0, m[0].length, type);
   }
 
   for (const m of text.matchAll(ENTROPY_TOKEN)) {
     const token = m[0];
-    if (shannonEntropy(token) >= ENTROPY_THRESHOLD) push(m.index ?? 0, "high_entropy");
+    if (shannonEntropy(token) >= ENTROPY_THRESHOLD) push(m.index ?? 0, token.length, "high_entropy");
   }
 
   violations.sort((a, b) => a.offset - b.offset);
