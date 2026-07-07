@@ -4,7 +4,7 @@
 // short timeout, always exits 0 (a dead worker must not break the IDE).
 
 export async function forwardHook(): Promise<void> {
-  const workerUrl = process.env["AZNEX_WORKER_URL"] ?? "http://localhost:3001";
+  const workerUrl = process.env["AZNEX_WORKER_URL"] ?? "http://localhost:29639";
 
   const body = await Bun.stdin.text();
   try {

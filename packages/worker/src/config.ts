@@ -27,7 +27,9 @@ export function loadWorkerConfig(configPath = CONFIG_PATH): WorkerConfig {
   return {
     serviceUrl: process.env["AZNEX_SERVICE_URL"] ?? file.serviceUrl ?? null,
     apiKey: process.env["AZNEX_API_KEY"] ?? file.apiKey ?? null,
-    workerPort: Number(process.env["AZNEX_WORKER_PORT"] ?? file.workerPort ?? 3001),
+    // 29639 = "AZNEX" on a phone keypad — high registered range, clear of the
+    // 3000-3010 dev-server belt where collisions are silent and confusing.
+    workerPort: Number(process.env["AZNEX_WORKER_PORT"] ?? file.workerPort ?? 29639),
     claudePath: process.env["CLAUDE_CODE_PATH"] ?? file.claudePath ?? null,
   };
 }
