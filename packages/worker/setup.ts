@@ -120,7 +120,8 @@ export async function runSetup(args: string[]): Promise<void> {
 
 For reads (any MCP-capable agent):
   Claude Code:
-    claude mcp add aznex --transport http ${serviceUrl}/mcp --header "Authorization: Bearer ${apiKey}"
+    claude mcp add aznex -s user --transport http ${serviceUrl}/mcp --header "Authorization: Bearer ${apiKey}"
+    (-s user makes it available in every repo; re-running? \`claude mcp remove aznex\` first)
   Codex / other agents: point their MCP config at ${serviceUrl}/mcp with the same Authorization header.
 `);
 }
