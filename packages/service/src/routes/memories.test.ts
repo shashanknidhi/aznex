@@ -101,6 +101,7 @@ test("list: team_shared + caller's own private, never others' private", async ()
   const own = body.items.find((m: any) => m.id === "mem_own_private");
   expect(own.mine).toBe(true);
   expect(own.promotion_state).toBe("private");
+  expect(own.author_login).toBe("alice"); // humans see github usernames, not ids
 });
 
 test("pagination slices and reports total", async () => {

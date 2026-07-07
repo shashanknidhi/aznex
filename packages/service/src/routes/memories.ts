@@ -7,6 +7,19 @@ import { verifyRepoAccess } from "../auth/repo-access.js";
 import { RepoRepository } from "../repositories/repo.js";
 import { MemoryRepository, type MemoryFilter } from "../repositories/memory.js";
 import { MemoryAnchorRepository } from "../repositories/memory-anchor.js";
+import { UserRepository } from "../repositories/user.js";
+import type { Database } from "bun:sqlite";
+import type { Memory } from "@aznex/shared";
+
+// Humans read GitHub usernames, not internal user ids.
+function authorLogins(db: Database, memories: Memory[]): Map<string, string> {
+  const users = new UserRepository(db);
+  const logins = new Map<string, string>();
+  for (const id of new Set(memories.map((m) => m.author_id))) {
+    logins.set(id, users.getById(id)?.github_login ?? "unknown");
+  }
+  return logins;
+}
 
 const PAGE_SIZE = 20;
 
@@ -40,7 +53,12 @@ export function registerMemoryRoutes(app: Hono<AppEnv>, auth: Auth | null): void
           memories.listByRepo(fingerprint, PAGE_SIZE, visible, offset),
           memories.countByRepo(fingerprint, visible),
         ];
-    return c.json({ items: items.map((m) => ({ ...m, mine: m.author_id === user.id })), total, page });
+    const logins = authorLogins(db, items);
+    return c.json({
+      items: items.map((m) => ({ ...m, mine: m.author_id === user.id, author_login: logins.get(m.author_id) })),
+      total,
+      page,
+    });
   });
 
   app.get("/memories/:id", sessionOrApiKeyAuth(auth), async (c) => {
@@ -57,7 +75,12 @@ export function registerMemoryRoutes(app: Hono<AppEnv>, auth: Auth | null): void
     if (!access.allowed) return c.json({ error: "forbidden" }, 403);
 
     const anchors = new MemoryAnchorRepository(db).listByMemory(memory.id);
-    return c.json({ ...memory, anchors, mine: memory.author_id === c.get("user").id });
+    return c.json({
+      ...memory,
+      anchors,
+      mine: memory.author_id === c.get("user").id,
+      author_login: authorLogins(db, [memory]).get(memory.author_id),
+    });
   });
 
   // Promotion lifecycle (data-lifecycle.md): author promotes private → team_shared;

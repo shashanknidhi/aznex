@@ -11,6 +11,7 @@ export interface MemoryItem {
   promotion_state: string;
   mine?: boolean;
   author_id: string;
+  author_login?: string;
   created_at_epoch: number;
 }
 
