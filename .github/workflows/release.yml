@@ -1,16 +1,20 @@
 name: Release
 
-# Publishes @aznex/shared and @aznex/worker to npm.
-# Trigger: push a tag like v0.1.1 (or run manually from the Actions tab).
+# Publishes @aznex/shared and @aznex/worker to npm via OIDC trusted publishing
+# (no token secret). Trigger: push a tag like v0.1.1, or run manually.
 # Railway deployment is separate — it auto-deploys every push to main.
 #
-# Requires the NPM_TOKEN repo secret: an npm "Automation" access token from an
-# account that owns the aznex org (npmjs.com → Access Tokens).
+# One-time setup on npmjs.com, per package (Settings → Trusted Publisher):
+#   GitHub Actions · repo shashanknidhi/aznex · workflow release.yml
 
 on:
   push:
     tags: ["v*"]
   workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write # OIDC token for npm trusted publishing
 
 jobs:
   publish:
@@ -22,6 +26,12 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
+
+      # Trusted publishing needs npm >= 11.5.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm install -g npm@latest
 
       - name: Install dependencies
         run: bun install
@@ -42,16 +52,16 @@ jobs:
           done
 
       - name: Publish (skips versions already on npm)
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
           for pkg in shared worker; do   # shared first — worker depends on it
             NAME=$(jq -r .name packages/$pkg/package.json)
             VERSION=$(jq -r .version packages/$pkg/package.json)
             if npm view "$NAME@$VERSION" version >/dev/null 2>&1; then
               echo "$NAME@$VERSION already published — skipping"
-            else
-              (cd packages/$pkg && bun publish)
+              continue
             fi
+            # bun pm pack rewrites the workspace:* dependency; npm publish
+            # (unlike bun publish) speaks OIDC trusted publishing + provenance.
+            (cd packages/$pkg && bun pm pack --destination /tmp/release)
+            npm publish "/tmp/release/$(echo "$NAME" | tr -d '@' | tr '/' '-')-$VERSION.tgz" --provenance --access public
           done
