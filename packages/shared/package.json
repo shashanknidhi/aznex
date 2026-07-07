@@ -1,11 +1,24 @@
 {
   "name": "@aznex/shared",
   "version": "0.1.0",
-  "private": true,
+  "description": "Aznex shared types, data model, API contracts, secret scanning, repo fingerprinting",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shashanknidhi/aznex.git",
+    "directory": "packages/shared"
+  },
   "type": "module",
   "main": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts"
+  },
+  "files": [
+    "src",
+    "!src/**/*.test.ts"
+  ],
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

@@ -6,17 +6,44 @@ Receives lifecycle hook payloads from a coding agent (Claude Code, Codex, etc.),
 
 Hooks always return immediately — payloads are queued on `POST /hook` and processed by an async drain loop, so the agent/IDE never waits on processing.
 
-## One-command developer setup
+## Developer install (no repo clone needed)
+
+One command — installs Bun if missing, installs this package, runs setup.
+Auth happens in your browser (GitHub login on the Aznex web app), no key to
+copy around:
 
 ```sh
-bun packages/worker/setup.ts --service-url https://<your-app>.up.railway.app --api-key axk_…
+curl -fsSL https://<your-app>.up.railway.app/install.sh | bash
 ```
 
-Validates the URL + key against the live service, writes `~/.aznex/config.json`
-(0600 — the daemon reads this, since launchd/systemd don't see your shell env),
-installs the login daemon, wires the Claude Code capture hooks globally in
+Or manually with [Bun](https://bun.sh) already installed:
+
+```sh
+bun install -g @aznex/worker
+aznex-worker setup --service-url https://<your-app>.up.railway.app
+```
+
+Headless/CI machines can skip the browser flow by passing their key via the `--api-key` flag.
+
+Prereq either way: Claude Code. Setup validates the URL + key
+against the live service, writes `~/.aznex/config.json` (0600 — the daemon
+reads this, since launchd/systemd don't see your shell env), installs the
+login daemon, wires the Claude Code capture hooks globally in
 `~/.claude/settings.json`, and prints the MCP command for reads.
-`--uninstall` removes the daemon.
+`aznex-worker uninstall` removes the daemon.
+
+## Publishing (maintainers)
+
+Both packages publish from TS source — no build step. `bun publish` rewrites
+the `workspace:*` dependency to the real version.
+
+```sh
+npm login                                   # owner of the aznex npm org
+bun publish --cwd packages/shared
+bun publish --cwd packages/worker
+```
+
+Bump both versions together; the worker pins `@aznex/shared` at publish time.
 
 ## Run
 

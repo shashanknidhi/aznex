@@ -1,14 +1,38 @@
 {
   "name": "@aznex/worker",
   "version": "0.1.0",
-  "private": true,
+  "description": "Aznex local worker — captures coding-agent sessions, extracts memories via your Claude subscription, scrubs secrets, ships them to your team's Aznex service",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shashanknidhi/aznex.git",
+    "directory": "packages/worker"
+  },
   "type": "module",
   "main": "./src/index.ts",
+  "bin": {
+    "aznex-worker": "./cli.ts"
+  },
+  "files": [
+    "cli.ts",
+    "setup.ts",
+    "src",
+    "daemon",
+    "hooks",
+    "!src/eval",
+    "!**/*.test.ts"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "dev": "bun --watch src/index.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@aznex/shared": "workspace:*"
+  },
+  "engines": {
+    "bun": ">=1.1"
   }
 }
