@@ -21,7 +21,7 @@ export function registerMemoryRoutes(app: Hono<AppEnv>, auth: Auth | null): void
     const q = c.req.query("q")?.trim();
 
     const db = c.get("db");
-    const repo = new RepoRepository(db).getByFingerprint(fingerprint);
+    const repo = new RepoRepository(db).getActiveByFingerprint(fingerprint);
     if (!repo) return c.json({ error: "unknown_repo" }, 403);
     const access = await verifyRepoAccess({ user: c.get("user"), repo, config: loadConfig() });
     if (!access.allowed) return c.json({ error: "forbidden" }, 403);
@@ -47,7 +47,7 @@ export function registerMemoryRoutes(app: Hono<AppEnv>, auth: Auth | null): void
     if (!memory || memory.promotion_state !== "team_shared") {
       return c.json({ error: "not_found" }, 404);
     }
-    const repo = new RepoRepository(db).getByFingerprint(memory.repo_fingerprint);
+    const repo = new RepoRepository(db).getActiveByFingerprint(memory.repo_fingerprint);
     if (!repo) return c.json({ error: "not_found" }, 404);
     const access = await verifyRepoAccess({ user: c.get("user"), repo, config: loadConfig() });
     if (!access.allowed) return c.json({ error: "forbidden" }, 403);

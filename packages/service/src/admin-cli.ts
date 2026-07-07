@@ -36,7 +36,10 @@ export function addRepo(db: Database, opts: AddRepoOpts) {
   }
   const repos = new RepoRepository(db);
   const existing = repos.getByFingerprint(opts.fingerprint);
-  if (existing) return existing;
+  if (existing) {
+    if (existing.status !== "active") repos.update(existing.id, { status: "active" });
+    return repos.getByFingerprint(opts.fingerprint)!;
+  }
   return repos.create({
     fingerprint: opts.fingerprint,
     canonical,

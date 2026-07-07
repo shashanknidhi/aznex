@@ -32,18 +32,28 @@ async function get<T>(path: string): Promise<T> {
   return (await res.json()) as T;
 }
 
+async function adminPost<T>(path: string, body: unknown, method = "POST"): Promise<T> {
+  const res = await fetch(path, {
+    method,
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(((await res.json()) as { error?: string }).error ?? `failed: ${res.status}`);
+  return (await res.json()) as T;
+}
+
 export const api = {
   repos: () =>
-    get<{ repos: RepoInfo[]; user: { login: string; is_admin: boolean } }>("/api/repos"),
-  addRepo: async (body: { fingerprint: string }) => {
-    const res = await fetch("/api/admin/repos", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    if (!res.ok) throw new Error(((await res.json()) as { error?: string }).error ?? `failed: ${res.status}`);
-  },
+    get<{
+      repos: RepoInfo[];
+      user: { login: string; is_admin: boolean };
+      github_app_install_url: string | null;
+    }>("/api/repos"),
+  addRepo: (body: { fingerprint: string }) => adminPost<unknown>("/api/admin/repos", body),
+  removeRepo: (fingerprint: string) => adminPost<unknown>("/api/admin/repos", { fingerprint }, "DELETE"),
+  syncInstallation: (installation_id: number) =>
+    adminPost<{ onboarded: string[]; skipped: string[] }>("/api/admin/installations/sync", { installation_id }),
   memories: (fingerprint: string, opts?: { q?: string; page?: number }) => {
     const params = new URLSearchParams({ repo_fingerprint: fingerprint });
     if (opts?.q) params.set("q", opts.q);

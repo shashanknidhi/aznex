@@ -54,6 +54,37 @@ function appJwt(appId: string, privateKey: string, nowSec: number): string {
 const GH_HEADERS = { Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" };
 
 /**
+ * List all repos covered by a GitHub App installation (owner picked them on
+ * GitHub's install page). ponytail: first 100 repos per installation — add
+ * pagination when a pilot org selects more.
+ */
+export async function listInstallationRepos(
+  installationId: number,
+  config: Config,
+  fetchImpl: FetchImpl = fetch,
+): Promise<{ canonical: string; githubRepoId: string }[]> {
+  if (!config.githubAppId || !config.githubAppPrivateKey) {
+    throw new Error("GitHub App credentials not configured (GITHUB_APP_ID / GITHUB_APP_PRIVATE_KEY)");
+  }
+  const jwt = appJwt(config.githubAppId, config.githubAppPrivateKey, Math.floor(Date.now() / 1000));
+  const tokenRes = await fetchImpl(
+    `https://api.github.com/app/installations/${installationId}/access_tokens`,
+    { method: "POST", headers: { ...GH_HEADERS, Authorization: `Bearer ${jwt}` } },
+  );
+  if (!tokenRes.ok) throw new Error(`unknown installation ${installationId}`);
+  const { token } = (await tokenRes.json()) as { token: string };
+
+  const reposRes = await fetchImpl("https://api.github.com/installation/repositories?per_page=100", {
+    headers: { ...GH_HEADERS, Authorization: `Bearer ${token}` },
+  });
+  if (!reposRes.ok) throw new Error("could not list installation repositories");
+  const { repositories } = (await reposRes.json()) as {
+    repositories: { id: number; full_name: string }[];
+  };
+  return repositories.map((r) => ({ canonical: r.full_name, githubRepoId: String(r.id) }));
+}
+
+/**
  * Resolve a repo's GitHub numeric id and App installation id from its
  * canonical "owner/name" — so admins onboard by name alone. Uses the same
  * GitHub App credentials as access verification.

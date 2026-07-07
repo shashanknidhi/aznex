@@ -22,7 +22,7 @@ export function registerIngestRoutes(app: Hono<AppEnv>): void {
     const db = c.get("db");
 
     // Repo must be known to the service (onboarded) and the caller must have access.
-    const repo = new RepoRepository(db).getByFingerprint(req.repo_fingerprint);
+    const repo = new RepoRepository(db).getActiveByFingerprint(req.repo_fingerprint);
     if (!repo) return c.json({ error: "unknown_repo" }, 403);
     const access = await verifyRepoAccess({ user, repo, config: loadConfig() });
     if (!access.allowed) return c.json({ error: "forbidden" }, 403);

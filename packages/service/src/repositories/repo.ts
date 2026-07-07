@@ -52,6 +52,12 @@ export class RepoRepository implements IRepoRepository {
     return row ? mapRow(row) : null;
   }
 
+  // Read/write paths use this: a de-boarded (inactive) repo behaves as unknown.
+  getActiveByFingerprint(fingerprint: string): Repo | null {
+    const repo = this.getByFingerprint(fingerprint);
+    return repo?.status === "active" ? repo : null;
+  }
+
   getByFingerprint(fingerprint: string): Repo | null {
     const row = this.db.prepare('SELECT * FROM repo WHERE fingerprint = ?').get(fingerprint) as RepoRow | null;
     return row ? mapRow(row) : null;

@@ -122,15 +122,27 @@ function OnboardRepoForm({ onAdded }: { onAdded: () => void }) {
 function RepoSelect() {
   const [repos, setRepos] = useState<RepoInfo[] | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [installUrl, setInstallUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const load = () =>
     api.repos().then((r) => {
       setRepos(r.repos);
       setIsAdmin(r.user.is_admin);
+      setInstallUrl(r.github_app_install_url);
     }).catch((e) => setError(String(e)));
   useEffect(() => {
     void load();
   }, []);
+
+  async function deboard(fingerprint: string) {
+    try {
+      await api.removeRepo(fingerprint);
+      await load();
+    } catch (e) {
+      setError(String(e));
+    }
+  }
+
   if (error) return <p className="error">{error}</p>;
   if (!repos) return <p className="muted">Loading repos…</p>;
   return (
@@ -139,17 +151,71 @@ function RepoSelect() {
       {repos.length === 0 && <p className="muted">No Aznex-enabled repos you can access yet.</p>}
       <ul className="list">
         {repos.map((r) => (
-          <li key={r.fingerprint}>
+          <li key={r.fingerprint} className="repo-row">
             <Link to={`/repo/${encodeURIComponent(r.fingerprint)}`}>{r.canonical}</Link>
+            {isAdmin && (
+              <button className="danger small" onClick={() => void deboard(r.fingerprint)}>
+                de-board
+              </button>
+            )}
           </li>
         ))}
       </ul>
       {isAdmin && (
         <>
-          <h3>Onboard a repository (admin)</h3>
+          <h3>Onboard repositories (admin)</h3>
+          {installUrl && (
+            <p>
+              <a href={`${installUrl}`}>
+                <button type="button">Install / pick repos on GitHub →</button>
+              </a>{" "}
+              <span className="muted">
+                select repos there; you'll be redirected back and they'll onboard automatically
+              </span>
+            </p>
+          )}
+          <p className="muted">Or onboard one by name:</p>
           <OnboardRepoForm onAdded={() => void load()} />
         </>
       )}
+    </div>
+  );
+}
+
+// GitHub redirects here after App install/update (Setup URL) with
+// ?installation_id=…; we onboard every selected repo the caller can access.
+function GithubSetup() {
+  const [params] = useSearchParams();
+  const installationId = Number(params.get("installation_id"));
+  const [result, setResult] = useState<{ onboarded: string[]; skipped: string[] } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!Number.isInteger(installationId) || installationId <= 0) {
+      setError("missing installation_id");
+      return;
+    }
+    api.syncInstallation(installationId).then(setResult).catch((e) => setError(String(e)));
+  }, [installationId]);
+
+  if (error) return <p className="error">{error} — <Link to="/">back to repos</Link></p>;
+  if (!result) return <p className="muted">Onboarding selected repositories…</p>;
+  return (
+    <div>
+      <h2>GitHub App installation synced</h2>
+      {result.onboarded.length > 0 && (
+        <>
+          <h3>Onboarded</h3>
+          <ul>{result.onboarded.map((f) => <li key={f}><code>{f}</code></li>)}</ul>
+        </>
+      )}
+      {result.skipped.length > 0 && (
+        <>
+          <h3>Skipped (you don't have GitHub access)</h3>
+          <ul>{result.skipped.map((f) => <li key={f}><code>{f}</code></li>)}</ul>
+        </>
+      )}
+      <p><Link to="/">← back to repositories</Link></p>
     </div>
   );
 }
@@ -295,6 +361,7 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/cli-auth" element={<RequireAuth><CliAuth /></RequireAuth>} />
+          <Route path="/github/setup" element={<RequireAuth><GithubSetup /></RequireAuth>} />
           <Route path="/" element={<RequireAuth><RepoSelect /></RequireAuth>} />
           <Route path="/repo/:fingerprint" element={<RequireAuth><MemoryList /></RequireAuth>} />
           <Route path="/memory/:id" element={<RequireAuth><MemoryView /></RequireAuth>} />
