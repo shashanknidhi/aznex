@@ -3,6 +3,7 @@ import type { Database } from "bun:sqlite";
 import type { User } from "@aznex/shared";
 import pkg from "../package.json" with { type: "json" };
 import { registerIngestRoutes } from "./routes/ingest.js";
+import { registerMcpRoutes } from "./routes/mcp.js";
 
 // Context shared across all handlers. `user` is set by the auth middleware (#10).
 export interface AppEnv {
@@ -28,7 +29,9 @@ export function createApp(db: Database): Hono<AppEnv> {
   registerIngestRoutes(v1); // #12 POST /v1/ingest
   app.route("/v1", v1);
 
-  app.route("/mcp", new Hono<AppEnv>()); // #13/#14 MCP tools
+  const mcp = new Hono<AppEnv>();
+  registerMcpRoutes(mcp); // #13/#14 MCP tools
+  app.route("/mcp", mcp);
   app.route("/api", new Hono<AppEnv>()); // #15 frontend read API
 
   app.onError((err, c) => {
