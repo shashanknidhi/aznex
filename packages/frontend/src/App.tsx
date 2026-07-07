@@ -89,11 +89,47 @@ function CliAuth() {
 
 // ── repo selector (#22) ───────────────────────────────────────────────────────
 
+function OnboardRepoForm({ onAdded }: { onAdded: () => void }) {
+  const [fingerprint, setFingerprint] = useState("");
+  const [status, setStatus] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setStatus(null);
+    setBusy(true);
+    try {
+      await api.addRepo({ fingerprint: fingerprint.trim() });
+      setStatus("✓ onboarded");
+      setFingerprint("");
+      onAdded();
+    } catch (err) {
+      setStatus(String(err instanceof Error ? err.message : err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form className="toolbar" onSubmit={submit}>
+      <input required placeholder="github.com/org/repo" value={fingerprint} onChange={(e) => setFingerprint(e.target.value)} />
+      <button type="submit" disabled={busy}>{busy ? "Onboarding…" : "Onboard"}</button>
+      {status && <span className="muted">{status}</span>}
+    </form>
+  );
+}
+
 function RepoSelect() {
   const [repos, setRepos] = useState<RepoInfo[] | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const load = () =>
+    api.repos().then((r) => {
+      setRepos(r.repos);
+      setIsAdmin(r.user.is_admin);
+    }).catch((e) => setError(String(e)));
   useEffect(() => {
-    api.repos().then((r) => setRepos(r.repos)).catch((e) => setError(String(e)));
+    void load();
   }, []);
   if (error) return <p className="error">{error}</p>;
   if (!repos) return <p className="muted">Loading repos…</p>;
@@ -108,6 +144,12 @@ function RepoSelect() {
           </li>
         ))}
       </ul>
+      {isAdmin && (
+        <>
+          <h3>Onboard a repository (admin)</h3>
+          <OnboardRepoForm onAdded={() => void load()} />
+        </>
+      )}
     </div>
   );
 }
