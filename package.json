@@ -17,7 +17,7 @@
   },
   "scripts": {
     "build": "bun run --filter '*' build",
-    "typecheck": "bunx tsc --noEmit -p packages/shared/tsconfig.json && bunx tsc --noEmit -p packages/worker/tsconfig.json && bunx tsc --noEmit -p packages/service/tsconfig.json",
+    "typecheck": "bunx tsc --noEmit -p packages/shared/tsconfig.json && bunx tsc --noEmit -p packages/worker/tsconfig.json && bunx tsc --noEmit -p packages/service/tsconfig.json && bunx tsc --noEmit -p packages/frontend/tsconfig.json",
     "test": "bun test",
     "dev:service": "bun run --cwd packages/service dev",
     "dev:worker": "bun run --cwd packages/worker dev"

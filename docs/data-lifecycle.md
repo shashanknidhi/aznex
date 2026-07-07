@@ -2,6 +2,8 @@
 
 State machines for every entity that has a lifecycle in Aznex. Immutable entities (e.g. `AgentEvent`, `MemoryAnchor`) are not listed — they are written once and never mutated.
 
+> **Implementation status:** the states and enums below match the code exactly. A few *transitions* are executed by components that are still planned rather than built: GitHub webhook handling (repo `active ↔ inactive`), the repo-member sync job, the session reaper, and the staleness engine that sets `stale_suspected`. Everything else is live.
+
 ---
 
 ## Memory — `promotion_state`

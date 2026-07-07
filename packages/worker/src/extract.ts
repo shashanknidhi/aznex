@@ -11,7 +11,7 @@ import type { RawObservation } from "./compress.js";
 
 // Versioned prompt: the Phase-0-validated extraction prompt, pinned.
 export const EXTRACTION_PROMPT_VERSION = "extraction-v1";
-export const EXTRACTION_PROMPT_PATH = join(import.meta.dir, "eval", "prompts", "extraction.md");
+export const EXTRACTION_PROMPT_PATH = join(import.meta.dir, "prompts", "extraction.md");
 
 export interface ExtractionContext {
   repoFingerprint: string;

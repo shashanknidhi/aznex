@@ -189,7 +189,7 @@ function buildReport(results: FixtureResult[]): string {
 
 async function main() {
   const evalDir = dirname(new URL(import.meta.url).pathname);
-  const promptPath = join(evalDir, "prompts", "extraction.md");
+  const promptPath = join(evalDir, "..", "prompts", "extraction.md");
   const fixturesDir = join(evalDir, "fixtures");
   const resultsDir = join(evalDir, "eval-results");
 

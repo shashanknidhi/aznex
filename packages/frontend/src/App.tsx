@@ -7,6 +7,8 @@ import {
   Navigate,
   useParams,
   useNavigate,
+  useLocation,
+  useSearchParams,
 } from "react-router-dom";
 import { authClient, api, type MemoryItem, type MemoryDetail, type RepoInfo } from "./api.js";
 import { filterMemories, formatDate, preview } from "./lib.js";
@@ -22,23 +24,65 @@ function useSession() {
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { session, loading } = useSession();
+  const loc = useLocation();
   if (loading) return <p className="muted">Loading…</p>;
-  if (!session) return <Navigate to="/login" replace />;
+  if (!session) {
+    return <Navigate to={`/login?next=${encodeURIComponent(loc.pathname + loc.search)}`} replace />;
+  }
   return <>{children}</>;
 }
 
 function Login() {
   const { session } = useSession();
-  if (session) return <Navigate to="/" replace />;
+  const [params] = useSearchParams();
+  const next = params.get("next") ?? "/";
+  if (session) return <Navigate to={next} replace />;
   return (
     <div className="center">
       <h1>Aznex</h1>
       <p className="muted">Team-shared institutional memory for coding agents.</p>
       <button
-        onClick={() => authClient.signIn.social({ provider: "github", callbackURL: "/" })}
+        onClick={() => authClient.signIn.social({ provider: "github", callbackURL: next })}
       >
         Sign in with GitHub
       </button>
+    </div>
+  );
+}
+
+// ── CLI device authorization (aznex-worker setup) ─────────────────────────────
+
+function CliAuth() {
+  const [params] = useSearchParams();
+  const port = Number(params.get("port"));
+  const state = params.get("state") ?? "";
+  const [error, setError] = useState<string | null>(null);
+  const [approved, setApproved] = useState(false);
+  const valid = Number.isInteger(port) && port >= 1024 && port <= 65535 && state.length > 0;
+
+  async function approve() {
+    try {
+      const res = await fetch("/api/cli-auth/approve", { method: "POST", credentials: "include" });
+      if (!res.ok) throw new Error(`approve failed: ${res.status}`);
+      const { code } = (await res.json()) as { code: string };
+      setApproved(true);
+      window.location.href = `http://127.0.0.1:${port}/callback?code=${code}&state=${encodeURIComponent(state)}`;
+    } catch (e) {
+      setError(String(e));
+    }
+  }
+
+  if (!valid) return <p className="error">Invalid authorization request (missing port/state).</p>;
+  if (approved) return <p>✓ Authorized — you can close this tab and return to your terminal.</p>;
+  return (
+    <div className="center">
+      <h2>Authorize this device?</h2>
+      <p className="muted">
+        <code>aznex-worker setup</code> on this machine (localhost:{port}) is asking for an API
+        key tied to your account. Only approve if you just ran setup yourself.
+      </p>
+      {error && <p className="error">{error}</p>}
+      <button onClick={approve}>Approve</button>
     </div>
   );
 }
@@ -208,6 +252,7 @@ export default function App() {
       <main className="container">
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/cli-auth" element={<RequireAuth><CliAuth /></RequireAuth>} />
           <Route path="/" element={<RequireAuth><RepoSelect /></RequireAuth>} />
           <Route path="/repo/:fingerprint" element={<RequireAuth><MemoryList /></RequireAuth>} />
           <Route path="/memory/:id" element={<RequireAuth><MemoryView /></RequireAuth>} />
