@@ -69,7 +69,9 @@ test("happy path persists session + memory, returns 202", async () => {
   ]));
   expect(res.status).toBe(202);
   expect(await res.json()).toEqual({ accepted: 1, rejected: [] });
-  expect(new MemoryRepository(db).getById("mem_1")?.content).toBe("auth uses RS256");
+  const stored = new MemoryRepository(db).getById("mem_1");
+  expect(stored?.content).toBe("auth uses RS256");
+  expect(stored?.promotion_state).toBe("team_shared"); // pilot default: shared on ingest
   expect(new MemoryAnchorRepository(db).listByMemory("mem_1").length).toBe(1);
 });
 
@@ -96,6 +98,19 @@ test("duplicate session.id + memory.id is idempotent", async () => {
   expect(((await res2.json()) as { accepted: number }).accepted).toBe(1);
   // no duplicate rows
   expect(new MemoryRepository(db).listBySession("sess_1").length).toBe(1);
+});
+
+test("AZNEX_DEFAULT_PROMOTION=private keeps ingested memories author-private", async () => {
+  process.env["AZNEX_DEFAULT_PROMOTION"] = "private";
+  try {
+    const { db, app } = seed();
+    await post(app, baseReq([
+      { id: "mem_priv_default", type: "raw_observation", content: "review-first note", anchors: [], ai_extracted: false },
+    ]));
+    expect(new MemoryRepository(db).getById("mem_priv_default")?.promotion_state).toBe("private");
+  } finally {
+    delete process.env["AZNEX_DEFAULT_PROMOTION"];
+  }
 });
 
 test("bad token → 401", async () => {

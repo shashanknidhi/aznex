@@ -61,6 +61,8 @@ function mapRow(row: MemoryRow): Memory {
 export interface MemoryFilter {
   promotionState?: PromotionState;
   freshnessState?: FreshnessState;
+  /** team_shared plus this user's own memories (any promotion state). */
+  visibleTo?: string;
 }
 
 function filterClause(filter?: MemoryFilter): [sql: string, params: string[]] {
@@ -69,6 +71,10 @@ function filterClause(filter?: MemoryFilter): [sql: string, params: string[]] {
   if (filter?.promotionState) {
     sql += " AND memory.promotion_state = ?";
     params.push(filter.promotionState);
+  }
+  if (filter?.visibleTo) {
+    sql += " AND (memory.promotion_state = 'team_shared' OR memory.author_id = ?)";
+    params.push(filter.visibleTo);
   }
   if (filter?.freshnessState) {
     sql += " AND memory.freshness_state = ?";

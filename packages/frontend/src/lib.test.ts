@@ -3,7 +3,7 @@ import { filterMemories, preview } from "./lib.js";
 import type { MemoryItem } from "./api.js";
 
 const mk = (id: string, type: string, freshness: string): MemoryItem => ({
-  id, type, title: null, content: "c", freshness_state: freshness,
+  id, type, title: null, content: "c", freshness_state: freshness, promotion_state: "team_shared",
   author_id: "a", created_at_epoch: 0,
 });
 

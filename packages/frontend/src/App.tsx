@@ -242,7 +242,7 @@ function MemoryList() {
     return () => clearTimeout(t);
   }, [query]);
 
-  useEffect(() => {
+  const refresh = () =>
     api
       .memories(fingerprint, { q: debounced || undefined, page })
       .then((r) => {
@@ -250,6 +250,8 @@ function MemoryList() {
         setTotal(r.total);
       })
       .catch(() => setItems([]));
+  useEffect(() => {
+    void refresh();
   }, [fingerprint, debounced, page]);
 
   const visible = filterMemories(items, { type: typeFilter, freshness: freshFilter });
@@ -289,10 +291,33 @@ function MemoryList() {
             onClick={() => navigate(`/memory/${encodeURIComponent(m.id)}`)}
           >
             <span className="badge type">{m.type}</span>{" "}
-            <span className={badgeClass(m.freshness_state)}>{m.freshness_state}</span>
+            <span className={badgeClass(m.freshness_state)}>{m.freshness_state}</span>{" "}
+            {m.promotion_state !== "team_shared" && <span className="badge private">{m.promotion_state}</span>}
             <p>{m.title ? <strong>{m.title} — </strong> : null}{preview(m.content)}</p>
             <p className="muted">
               {m.author_id} · {formatDate(m.created_at_epoch)}
+              {m.mine && m.promotion_state === "private" && (
+                <button
+                  className="small"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    void api.promote(m.id).then(refresh);
+                  }}
+                >
+                  share with team
+                </button>
+              )}
+              {m.mine && m.promotion_state === "team_shared" && (
+                <button
+                  className="danger small"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    void api.revoke(m.id).then(refresh);
+                  }}
+                >
+                  make private
+                </button>
+              )}
             </p>
           </li>
         ))}

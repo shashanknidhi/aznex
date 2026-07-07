@@ -56,14 +56,27 @@ function seed(memoryCount = 3) {
     db.prepare("UPDATE memory SET created_at_epoch = ? WHERE id = ?").run(i * 1000, `mem_${i}`);
     memories.setPromotion(`mem_${i}`, "team_shared");
   }
-  // one private memory that must never appear
+  // another user's private memory must never appear to the caller
+  const other = new UserRepository(db).create({
+    github_id: "2", github_login: "mallory", display_name: "Mallory", avatar_url: null, metadata: {},
+  });
   memories.create({
-    id: "mem_private", repo_fingerprint: FP, session_id: null, author_id: user.id,
+    id: "mem_private", repo_fingerprint: FP, session_id: null, author_id: other.id,
     agent: "claude-code", kind: "observation", type: "extracted_learning",
     title: null, content: "private caching note", narrative: null,
     facts: [], concepts: [], files_read: [], files_modified: [],
     confirmed_commit: null, ai_extracted: true, metadata: {},
   });
+  db.prepare("UPDATE memory SET created_at_epoch = ? WHERE id = ?").run(50, "mem_private");
+  // the caller's own private memory IS visible (review-and-promote flow)
+  memories.create({
+    id: "mem_own_private", repo_fingerprint: FP, session_id: null, author_id: user.id,
+    agent: "claude-code", kind: "observation", type: "extracted_learning",
+    title: null, content: "my own private caching note", narrative: null,
+    facts: [], concepts: [], files_read: [], files_modified: [],
+    confirmed_commit: null, ai_extracted: true, metadata: {},
+  });
+  db.prepare("UPDATE memory SET created_at_epoch = ? WHERE id = ?").run(10, "mem_own_private");
   new MemoryAnchorRepository(db).upsert({ memory_id: "mem_1", path: "src/cache.ts", commit_sha: "abc" });
   return { db, app: createApp(db) };
 }
@@ -78,14 +91,16 @@ test("unauthenticated → 401", async () => {
   expect(res.status).toBe(401);
 });
 
-test("list returns team_shared only, newest first, with total", async () => {
+test("list: team_shared + caller's own private, never others' private", async () => {
   const { app } = seed();
   const res = await get(app, `/api/memories?repo_fingerprint=${encodeURIComponent(FP)}`);
   expect(res.status).toBe(200);
   const body = (await res.json()) as any;
-  expect(body.total).toBe(3);
-  expect(body.page).toBe(1);
-  expect(body.items.map((m: any) => m.id)).toEqual(["mem_3", "mem_2", "mem_1"]);
+  expect(body.total).toBe(4);
+  expect(body.items.map((m: any) => m.id)).toEqual(["mem_3", "mem_2", "mem_1", "mem_own_private"]);
+  const own = body.items.find((m: any) => m.id === "mem_own_private");
+  expect(own.mine).toBe(true);
+  expect(own.promotion_state).toBe("private");
 });
 
 test("pagination slices and reports total", async () => {
@@ -93,17 +108,18 @@ test("pagination slices and reports total", async () => {
   const p1 = (await (await get(app, `/api/memories?repo_fingerprint=${encodeURIComponent(FP)}&page=1`)).json()) as any;
   const p2 = (await (await get(app, `/api/memories?repo_fingerprint=${encodeURIComponent(FP)}&page=2`)).json()) as any;
   expect(p1.items.length).toBe(20);
-  expect(p2.items.length).toBe(5);
-  expect(p2.total).toBe(25);
+  expect(p2.items.length).toBe(6); // 25 shared + own private
+  expect(p2.total).toBe(26);
   expect(p2.page).toBe(2);
 });
 
-test("q= runs full-text search scoped to team_shared", async () => {
+test("q= search: includes own private, excludes others' private", async () => {
   const { app } = seed();
   const res = await get(app, `/api/memories?repo_fingerprint=${encodeURIComponent(FP)}&q=caching`);
   const body = (await res.json()) as any;
-  expect(body.total).toBe(3);
+  expect(body.total).toBe(4);
   expect(body.items.map((m: any) => m.id)).not.toContain("mem_private");
+  expect(body.items.map((m: any) => m.id)).toContain("mem_own_private");
 });
 
 test("missing repo_fingerprint → 400; unknown repo → 403", async () => {
@@ -121,8 +137,29 @@ test("detail returns full record with anchors", async () => {
   expect(body.anchors).toEqual([{ memory_id: "mem_1", path: "src/cache.ts", commit_sha: "abc" }]);
 });
 
-test("unknown or non-shared id → 404", async () => {
+test("unknown or others'-private id → 404; own private → 200", async () => {
   const { app } = seed();
   expect((await get(app, "/api/memories/nope")).status).toBe(404);
   expect((await get(app, "/api/memories/mem_private")).status).toBe(404);
+  expect((await get(app, "/api/memories/mem_own_private")).status).toBe(200);
+});
+
+function post(app: ReturnType<typeof createApp>, path: string, token = TOKEN) {
+  return app.request(path, { method: "POST", headers: { Authorization: `Bearer ${token}` } });
+}
+
+test("author promotes own private memory; teammate-visibility flips", async () => {
+  const { db, app } = seed();
+  const res = await post(app, "/api/memories/mem_own_private/promote");
+  expect(res.status).toBe(200);
+  expect(new MemoryRepository(db).getById("mem_own_private")?.promotion_state).toBe("team_shared");
+});
+
+test("promote of someone else's memory → 403; revoke by author works", async () => {
+  const { db, app } = seed();
+  expect((await post(app, "/api/memories/mem_private/promote")).status).toBe(403);
+
+  const rev = await post(app, "/api/memories/mem_1/revoke"); // mem_1 authored by caller
+  expect(rev.status).toBe(200);
+  expect(new MemoryRepository(db).getById("mem_1")?.promotion_state).toBe("private");
 });
