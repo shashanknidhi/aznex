@@ -62,7 +62,7 @@ Set `AZNEX_AUTO_UPDATE=off` to pin a version (then update manually with
 ## Run
 
 ```sh
-bun run --cwd packages/worker dev   # starts on :3001 (AZNEX_WORKER_PORT to change)
+bun run --cwd packages/worker dev   # starts on :29639 (AZNEX_WORKER_PORT to change)
 ```
 
 ## Environment
@@ -72,8 +72,8 @@ the file since it never sees your shell env.
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `AZNEX_WORKER_PORT` | `3001` | Port the worker listens on (loopback only) |
-| `AZNEX_WORKER_URL` | `http://localhost:3001` | Where hook scripts send events |
+| `AZNEX_WORKER_PORT` | `29639` | Port the worker listens on (loopback only) |
+| `AZNEX_WORKER_URL` | `http://localhost:29639` | Where hook scripts send events |
 | `AZNEX_SERVICE_URL` | from config file | Remote service to POST memories to |
 | `AZNEX_API_KEY` | from config file | Bearer key for `/v1/ingest` |
 
