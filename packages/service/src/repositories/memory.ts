@@ -148,12 +148,20 @@ export class MemoryRepository implements IMemoryRepository {
     return this.getById(id);
   }
 
-  listByRepo(repoFingerprint: string, limit = 100, filter?: MemoryFilter): Memory[] {
+  listByRepo(repoFingerprint: string, limit = 100, filter?: MemoryFilter, offset = 0): Memory[] {
     const [cond, params] = filterClause(filter);
     const rows = this.db.prepare(
-      `SELECT * FROM memory WHERE repo_fingerprint = ?${cond} ORDER BY created_at_epoch DESC LIMIT ?`
-    ).all(repoFingerprint, ...params, limit) as MemoryRow[];
+      `SELECT * FROM memory WHERE repo_fingerprint = ?${cond} ORDER BY created_at_epoch DESC LIMIT ? OFFSET ?`
+    ).all(repoFingerprint, ...params, limit, offset) as MemoryRow[];
     return rows.map(mapRow);
+  }
+
+  countByRepo(repoFingerprint: string, filter?: MemoryFilter): number {
+    const [cond, params] = filterClause(filter);
+    const row = this.db.prepare(
+      `SELECT COUNT(*) AS n FROM memory WHERE repo_fingerprint = ?${cond}`
+    ).get(repoFingerprint, ...params) as { n: number };
+    return row.n;
   }
 
   listBySession(sessionId: string): Memory[] {
@@ -163,7 +171,7 @@ export class MemoryRepository implements IMemoryRepository {
     return rows.map(mapRow);
   }
 
-  search(repoFingerprint: string, query: string, limit = 20, filter?: MemoryFilter): Memory[] {
+  search(repoFingerprint: string, query: string, limit = 20, filter?: MemoryFilter, offset = 0): Memory[] {
     const ftsQuery = buildFtsQuery(query);
     if (!ftsQuery) return [];
     const [cond, params] = filterClause(filter);
@@ -174,9 +182,23 @@ export class MemoryRepository implements IMemoryRepository {
       WHERE memory_fts.repo_fingerprint = ?
         AND memory_fts MATCH ?${cond}
       ORDER BY bm25(memory_fts)
-      LIMIT ?
-    `).all(repoFingerprint, ftsQuery, ...params, limit) as MemoryRow[];
+      LIMIT ? OFFSET ?
+    `).all(repoFingerprint, ftsQuery, ...params, limit, offset) as MemoryRow[];
     return rows.map(mapRow);
+  }
+
+  countSearch(repoFingerprint: string, query: string, filter?: MemoryFilter): number {
+    const ftsQuery = buildFtsQuery(query);
+    if (!ftsQuery) return 0;
+    const [cond, params] = filterClause(filter);
+    const row = this.db.prepare(`
+      SELECT COUNT(*) AS n
+      FROM memory
+      JOIN memory_fts ON memory_fts.memory_id = memory.id
+      WHERE memory_fts.repo_fingerprint = ?
+        AND memory_fts MATCH ?${cond}
+    `).get(repoFingerprint, ftsQuery, ...params) as { n: number };
+    return row.n;
   }
 
   setFreshness(id: string, state: FreshnessState): void {
