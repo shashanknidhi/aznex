@@ -46,3 +46,14 @@ Add to your project's `.claude/settings.json`:
 ```
 
 Claude Code pipes the hook event JSON to the script's stdin; the script forwards it to the worker with a 2-second timeout and always exits 0, so a stopped worker never stalls the agent. Set `AZNEX_WORKER_URL` / `AZNEX_WORKER_TOKEN` in your shell (or inline in the hook `command`) if the defaults don't fit.
+
+## Run as a daemon
+
+```sh
+bun packages/worker/daemon/install.ts              # install + start (launchd/systemd --user)
+bun packages/worker/daemon/install.ts --uninstall  # stop + remove
+```
+
+The worker then starts at login and is restarted within ~2 seconds if it
+crashes. Logs go to `~/.aznex/logs/worker.log` (rotated past 10 MB on daemon
+restart, one generation kept).
