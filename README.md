@@ -59,6 +59,29 @@ The service is the only tier that touches the database. Every read and write pas
 docker compose -f docker/docker-compose.yml up
 ```
 
+## Install for Claude Code
+
+Two channels — pick one:
+
+**Plugin** (hooks wired declaratively, no settings.json edits):
+
+```
+/plugin marketplace add shashanknidhi/aznex
+/plugin install aznex@aznex
+```
+
+**npm** (registers the same hooks globally in `~/.claude/settings.json`):
+
+```sh
+npx aznex-worker setup
+```
+
+Either way, `npx aznex-worker setup` is required once per machine — it
+authenticates against your team's aznex service, writes `~/.aznex/config.json`,
+and installs the background worker daemon. See [plugin/README.md](plugin/README.md).
+Worker settings (extraction model, context injection) live at
+http://localhost:29639 once the daemon is running.
+
 ## Status
 
 Early development.
