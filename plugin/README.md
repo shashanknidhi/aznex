@@ -19,7 +19,8 @@ npx aznex-worker setup
 ```
 
 Requires [Bun](https://bun.sh). Setup authenticates via your browser, writes
-`~/.aznex/config.json`, and installs a login daemon (launchd/systemd).
+`~/.aznex/config.json`, installs a login daemon (launchd/systemd), and
+registers the MCP server. Check the install anytime with `aznex-worker doctor`.
 
 > Already ran `aznex-worker setup`? It registers the same hooks globally in
 > `~/.claude/settings.json` — the plugin is an alternative channel, you don't
@@ -29,13 +30,11 @@ Requires [Bun](https://bun.sh). Setup authenticates via your browser, writes
 
 Memory queries go straight to your team's aznex service over HTTP MCP. Your
 API key lives in `~/.aznex/config.json` — it is deliberately not bundled here.
-Register once:
+`aznex-worker setup` registers the server automatically; to do it manually:
 
 ```
 claude mcp add aznex -s user --transport http <serviceUrl>/mcp --header "Authorization: Bearer <apiKey>"
 ```
-
-(`aznex-worker setup` prints this command with your values filled in.)
 
 ## Settings
 

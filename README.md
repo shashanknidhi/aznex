@@ -53,34 +53,96 @@ The service is the only tier that touches the database. Every read and write pas
 - **Frontend:** React + Vite
 - **Self-host:** Docker + docker-compose
 
-## Quick start (coming soon)
+## Install
+
+### For developers
+
+One command. Get the **service URL** from your admin — that's all you need:
 
 ```sh
-docker compose -f docker/docker-compose.yml up
+curl -fsSL <SERVICE_URL>/install.sh | bash
 ```
 
-## Install for Claude Code
+It installs Bun if you don't have it, installs `@aznex/worker`, and runs
+setup: your browser opens for GitHub sign-in (no API key to copy), then it
+writes `~/.aznex/config.json`, installs the background worker daemon (starts
+at login, restarts on crash), wires the Claude Code hooks — capture **and**
+team-memory context injection at session start — and registers the `aznex`
+MCP server for reads. Works in every repo on the machine; sessions in repos
+your admin hasn't onboarded are skipped automatically.
 
-Two channels — pick one:
+**Requirements:** Claude Code (installed and logged in — extraction runs on
+your own subscription). Bun is auto-installed if missing. Headless/CI
+machines: pass a pre-minted key via `--api-key`.
 
-**Plugin** (hooks wired declaratively, no settings.json edits):
+> **Note:** `bun install -g @aznex/worker` alone installs the binary only —
+> it does not authenticate, install the daemon, or register hooks/MCP. Always
+> go through `install.sh` (or run `aznex-worker setup` yourself).
+
+Verify anytime:
+
+```sh
+aznex-worker doctor    # ✓/✗ checks: config, daemon, worker, service, key, hooks, MCP
+```
+
+First success: open a Claude Code session in an onboarded repo — a
+`# Team memory (aznex)` block appears at session start. End the session and
+your extracted memories show up in the viewer (`<SERVICE_URL>`) within a
+minute. Tune the worker (extraction model, context-injection knobs) at
+http://localhost:29639.
+
+**Alternative: plugin channel.** Prefer hooks via `/plugin` instead of
+`~/.claude/settings.json`? Install the plugin, then run setup for auth +
+daemon (pick **one** hook channel — both at once doubles the injected
+context):
 
 ```
 /plugin marketplace add shashanknidhi/aznex
 /plugin install aznex@aznex
 ```
-
-**npm** (registers the same hooks globally in `~/.claude/settings.json`):
-
 ```sh
 npx aznex-worker setup
 ```
 
-Either way, `npx aznex-worker setup` is required once per machine — it
-authenticates against your team's aznex service, writes `~/.aznex/config.json`,
-and installs the background worker daemon. See [plugin/README.md](plugin/README.md).
-Worker settings (extraction model, context injection) live at
-http://localhost:29639 once the daemon is running.
+See [plugin/README.md](plugin/README.md).
+
+**Troubleshooting** — run `aznex-worker doctor` first; it diagnoses the
+common cases with a fix per finding. Beyond that:
+
+| Symptom | Fix |
+|---|---|
+| Sessions produce no memories | `tail -50 ~/.aznex/logs/worker.log` — the worker logs every drop reason (most common: repo not onboarded by admin) |
+| Memories are team-visible / private unexpectedly | Deployment default is `AZNEX_DEFAULT_PROMOTION` (pilot: `team_shared`); flip individual memories in the viewer |
+| Uninstall | `aznex-worker uninstall` |
+
+### For admins (once per team)
+
+1. **Deploy the service** — Railway: New Project → Deploy from GitHub → this
+   repo (`railway.json` configures the build); attach a volume at `/app/data`;
+   generate a domain — that's your `<SERVICE_URL>`. Self-host instead:
+   `docker compose -f docker/docker-compose.yml up` (env in `.env`).
+2. **GitHub credentials** — a **GitHub App** (repo *Metadata: read*; install it
+   on your org; note App ID, private key, and set its Setup URL to
+   `<SERVICE_URL>/github/setup` with "Redirect on update" on) and a **GitHub
+   OAuth app** (callback `<SERVICE_URL>/api/auth/callback/github`).
+3. **Environment variables** on the service:
+
+   ```
+   DATABASE_PATH=/app/data/aznex.db
+   GITHUB_APP_ID=…            GITHUB_APP_PRIVATE_KEY=…
+   GITHUB_OAUTH_CLIENT_ID=…   GITHUB_OAUTH_CLIENT_SECRET=…
+   BETTER_AUTH_SECRET=…       # openssl rand -hex 32
+   AZNEX_BASE_URL=<SERVICE_URL>
+   AZNEX_FRONTEND_ORIGIN=<SERVICE_URL>
+   AZNEX_ALLOWED_GITHUB_LOGINS=alice,bob    # who may sign in
+   AZNEX_ADMIN_GITHUB_LOGINS=alice          # who may onboard repos
+   AZNEX_GITHUB_APP_SLUG=<app-slug>
+   ```
+
+   Redeploy; `curl <SERVICE_URL>/health` → `{"ok":true}`.
+4. **Onboard repos** — sign in to the viewer as an admin and use
+   "Install / pick repos on GitHub" (or onboard one repo by name). Then send
+   developers the `<SERVICE_URL>` — they self-serve from there.
 
 ## Status
 

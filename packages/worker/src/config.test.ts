@@ -69,14 +69,49 @@ test("mergeClaudeSettings adds all hook events with matchers and is idempotent",
 });
 
 test("re-running setup on a pre-context install adds only the new events", () => {
-  const cmd = "bun hook.ts";
+  const cmd = "/bun /repo/hooks/claude-code-hook.ts";
   // simulate an install that only had the original two events
   const old = { hooks: {
     PostToolUse: [{ hooks: [{ type: "command", command: cmd }] }],
     Stop: [{ hooks: [{ type: "command", command: cmd }] }],
   } };
-  const { added } = mergeClaudeSettings(old, cmd);
+  const { added, updated } = mergeClaudeSettings(old, cmd);
   expect(added).toEqual(["SessionEnd", "SessionStart", "PreToolUse"]);
+  expect(updated).toEqual([]);
+});
+
+test("setup from a different install path repoints hooks instead of duplicating", () => {
+  const oldCmd = "/bun /old-install/hooks/claude-code-hook.ts";
+  const first = mergeClaudeSettings({}, oldCmd);
+  const newCmd = "/bun /new-install/hooks/claude-code-hook.ts";
+  const { settings, added, updated } = mergeClaudeSettings(first.settings, newCmd);
+
+  expect(added).toEqual([]);
+  expect(updated).toEqual(["PostToolUse", "Stop", "SessionEnd", "SessionStart", "PreToolUse"]);
+  const hooks = settings["hooks"] as Record<string, { matcher?: string; hooks: { command: string }[] }[]>;
+  for (const event of Object.keys(hooks)) {
+    const commands = hooks[event]!.flatMap((e) => e.hooks.map((h) => h.command));
+    expect(commands.length).toBe(1); // no duplicates
+    expect(commands[0]).toStartWith(newCmd);
+  }
+  expect(hooks["SessionStart"]![0]!.matcher).toBe("startup|clear|compact"); // matcher survives rewrite
+});
+
+test("duplicated entries from older setups collapse to one", () => {
+  const cmd = "/bun /a/hooks/claude-code-hook.ts";
+  const damaged = { hooks: {
+    Stop: [
+      { hooks: [{ type: "command", command: "/bun /a/hooks/claude-code-hook.ts" }] },
+      { hooks: [{ type: "command", command: "/bun /b/hooks/claude-code-hook.ts" }] },
+      { hooks: [{ type: "command", command: "other-tool" }] },
+    ],
+  } };
+  const { settings, updated } = mergeClaudeSettings(damaged, cmd);
+  const stop = (settings["hooks"] as Record<string, { hooks: { command: string }[] }[]>)["Stop"]!;
+  const commands = stop.flatMap((e) => e.hooks.map((h) => h.command));
+  expect(updated).toContain("Stop");
+  expect(commands.filter((c) => c.includes("claude-code-hook.ts"))).toEqual([cmd]);
+  expect(commands).toContain("other-tool"); // foreign hooks untouched
 });
 
 test("mergeClaudeSettings preserves existing unrelated hooks", () => {
