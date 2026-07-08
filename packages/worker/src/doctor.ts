@@ -27,10 +27,14 @@ export interface DoctorDeps {
 
 const HOOK_EVENTS = ["PostToolUse", "Stop", "SessionEnd", "SessionStart", "PreToolUse"];
 // Where an installed aznex plugin would live (marketplace clone or version cache).
-const DEFAULT_PLUGIN_DIRS = [
+export const DEFAULT_PLUGIN_DIRS = [
   join(homedir(), ".claude", "plugins", "marketplaces", "aznex"),
   join(homedir(), ".claude", "plugins", "cache", "aznex"),
 ];
+
+export function aznexPluginInstalled(dirs: string[] = DEFAULT_PLUGIN_DIRS): boolean {
+  return dirs.some((d) => existsSync(d));
+}
 
 function readJson(path: string): Record<string, unknown> | null {
   try {
@@ -128,7 +132,7 @@ export async function runChecks(deps: DoctorDeps = {}): Promise<CheckResult[]> {
   );
   if (registered.length === HOOK_EVENTS.length) {
     results.push({ name: "hooks", status: "ok", detail: "all events registered" });
-  } else if ((deps.pluginDirs ?? DEFAULT_PLUGIN_DIRS).some((d) => existsSync(d))) {
+  } else if (aznexPluginInstalled(deps.pluginDirs)) {
     results.push({ name: "hooks", status: "ok", detail: "via aznex plugin" });
   } else if (registered.length > 0) {
     const missing = HOOK_EVENTS.filter((e) => !registered.includes(e));
@@ -144,6 +148,8 @@ export async function runChecks(deps: DoctorDeps = {}): Promise<CheckResult[]> {
   const projectScoped = Object.keys(projects).filter((p) => projects[p]?.mcpServers?.["aznex"]);
   if (mcpServers["aznex"]) {
     results.push({ name: "MCP (reads)", status: "ok" });
+  } else if (aznexPluginInstalled(deps.pluginDirs)) {
+    results.push({ name: "MCP (reads)", status: "ok", detail: "via aznex plugin (stdio proxy)" });
   } else if (projectScoped.length > 0) {
     // pre-v0.1.4 setups registered project-scope; memory then only reaches those repos
     results.push({
