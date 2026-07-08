@@ -5,6 +5,9 @@ import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/
 import {
   SearchMemoryParamsSchema,
   GetRecentContextParamsSchema,
+  GetMemoryParamsSchema,
+  GetMemoriesByPathParamsSchema,
+  ListSessionsParamsSchema,
   type Memory,
   type User,
 } from "@aznex/shared";
@@ -15,6 +18,7 @@ import { verifyRepoAccess } from "../auth/repo-access.js";
 import { RepoRepository } from "../repositories/repo.js";
 import { MemoryRepository, type MemoryFilter } from "../repositories/memory.js";
 import { MemoryAnchorRepository } from "../repositories/memory-anchor.js";
+import { SessionRepository } from "../repositories/session.js";
 import pkg from "../../package.json" with { type: "json" };
 
 // MCP read path (#13/#14). Agent-agnostic: any MCP client with an API key can
@@ -100,6 +104,87 @@ function buildMcpServer(db: Database, user: User): McpServer {
           type: m.type,
           content: m.content,
           freshness_state: m.freshness_state,
+        })),
+      });
+    },
+  );
+
+  server.registerTool(
+    "get_memory",
+    {
+      description:
+        "Fetch one memory by id — the full record: narrative, facts, concepts, anchors, provenance. Use after search/context returned an id you need details on.",
+      inputSchema: GetMemoryParamsSchema.shape,
+    },
+    async (params) => {
+      const memory = memories.getById(params.id);
+      // Authors see their own in any state; others only team_shared — and
+      // hidden records look identical to missing ones (don't leak existence).
+      if (!memory || (memory.promotion_state !== "team_shared" && memory.author_id !== user.id)) {
+        return toolError("not_found");
+      }
+      const denied = await checkRepoAccess(db, user, memory.repo_fingerprint);
+      if (denied) return toolError(denied);
+      return toolResult({
+        ...memory,
+        anchors: anchors.listByMemory(memory.id),
+      });
+    },
+  );
+
+  server.registerTool(
+    "get_memories_by_path",
+    {
+      description:
+        "Team-shared memories anchored to a repo-relative file path — what the team knows about a specific file.",
+      inputSchema: GetMemoriesByPathParamsSchema.shape,
+    },
+    async (params) => {
+      const denied = await checkRepoAccess(db, user, params.repo_fingerprint);
+      if (denied) return toolError(denied);
+      const filter = readFilter(params.include_stale);
+      const found = anchors
+        .listByPath(params.path)
+        .map((a) => memories.getById(a.memory_id))
+        .filter(
+          (m): m is Memory =>
+            m !== null &&
+            m.repo_fingerprint === params.repo_fingerprint &&
+            m.promotion_state === "team_shared" &&
+            (filter.freshnessState === undefined || m.freshness_state === filter.freshnessState),
+        );
+      return toolResult({
+        items: found.map((m) => ({
+          id: m.id,
+          type: m.type,
+          content: m.content,
+          freshness_state: m.freshness_state,
+          created_at_epoch: m.created_at_epoch,
+        })),
+      });
+    },
+  );
+
+  server.registerTool(
+    "list_sessions",
+    {
+      description:
+        "Recent capture sessions for a repo (timeline) — who worked when, with which agent. Session ids link memories together.",
+      inputSchema: ListSessionsParamsSchema.shape,
+    },
+    async (params) => {
+      const denied = await checkRepoAccess(db, user, params.repo_fingerprint);
+      if (denied) return toolError(denied);
+      const sessions = new SessionRepository(db).listByRepo(
+        params.repo_fingerprint,
+        Math.min(params.limit ?? 20, 100),
+      );
+      return toolResult({
+        items: sessions.map((s) => ({
+          id: s.id,
+          agent: s.agent,
+          started_at_epoch: s.started_at_epoch,
+          ended_at_epoch: s.ended_at_epoch,
         })),
       });
     },

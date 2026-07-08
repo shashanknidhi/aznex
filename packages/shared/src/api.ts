@@ -79,6 +79,24 @@ export const GetRecentContextParamsSchema = z.object({
 });
 export type GetRecentContextParams = z.infer<typeof GetRecentContextParamsSchema>;
 
+export const GetMemoryParamsSchema = z.object({
+  id: z.string().min(1),
+});
+export type GetMemoryParams = z.infer<typeof GetMemoryParamsSchema>;
+
+export const GetMemoriesByPathParamsSchema = z.object({
+  repo_fingerprint: z.string().min(1),
+  path: z.string().min(1),
+  include_stale: z.boolean().default(false),
+});
+export type GetMemoriesByPathParams = z.infer<typeof GetMemoriesByPathParamsSchema>;
+
+export const ListSessionsParamsSchema = z.object({
+  repo_fingerprint: z.string().min(1),
+  limit: z.number().int().positive().optional(),
+});
+export type ListSessionsParams = z.infer<typeof ListSessionsParamsSchema>;
+
 export const GetRecentContextResponseSchema = z.object({
   items: z.array(
     z.object({

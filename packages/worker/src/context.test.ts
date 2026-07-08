@@ -33,6 +33,7 @@ test("sessionStartContext returns hookSpecificOutput with formatted memories", a
   const out = (await sessionStartContext({ session_id: "s1", cwd: CWD, source: "startup" })) as any;
   expect(out.hookSpecificOutput.hookEventName).toBe("SessionStart");
   expect(out.hookSpecificOutput.additionalContext).toContain("- [decision] we use bun");
+  expect(out.systemMessage).toContain("1 team memories injected"); // visible banner
   const fingerprint = await computeRepoFingerprint(CWD);
   expect(calls[0]).toContain(`repo_fingerprint=${encodeURIComponent(fingerprint!)}`);
   expect(calls[0]).toContain("limit=10");
