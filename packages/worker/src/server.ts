@@ -2,6 +2,9 @@ import { HookQueue, type HookPayload } from "./queue.js";
 import { processHookPayload } from "./pipeline.js";
 import { loadWorkerConfig } from "./config.js";
 import { createContextHandlers, type ContextDeps } from "./context.js";
+import { CONFIG_PATH } from "./config.js";
+import { getSettings, updateSettings } from "./settings.js";
+import { SETTINGS_PAGE } from "./settings-page.js";
 
 export interface WorkerServer {
   server: ReturnType<typeof Bun.serve>;
@@ -50,6 +53,21 @@ export function startWorkerServer(opts?: {
       }
       if (req.method === "POST" && url.pathname === "/file-context") {
         return contextResponse(req, context.fileContext);
+      }
+      // Local settings surface (localhost-only bind is the access control).
+      const configPath = opts?.context?.configPath ?? CONFIG_PATH;
+      if (req.method === "GET" && url.pathname === "/") {
+        return new Response(SETTINGS_PAGE, { headers: { "Content-Type": "text/html; charset=utf-8" } });
+      }
+      if (req.method === "GET" && url.pathname === "/api/settings") {
+        return Response.json(getSettings(configPath));
+      }
+      if (req.method === "POST" && url.pathname === "/api/settings") {
+        const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
+        if (body === null || typeof body !== "object") {
+          return Response.json({ error: "invalid_json" }, { status: 400 });
+        }
+        return Response.json(updateSettings(body, configPath));
       }
       return Response.json({ error: "not_found" }, { status: 404 });
     },

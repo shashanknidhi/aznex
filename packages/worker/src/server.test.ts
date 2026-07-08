@@ -163,6 +163,36 @@ test("hook adapter relays context response body to stdout", async () => {
   }
 });
 
+test("settings page and API are served; apiKey never leaves the worker", async () => {
+  const { mkdtempSync, writeFileSync } = await import("fs");
+  const { join } = await import("path");
+  const { tmpdir } = await import("os");
+  const configPath = join(mkdtempSync(join(tmpdir(), "aznex-srv-")), "config.json");
+  writeFileSync(configPath, JSON.stringify({ serviceUrl: "https://svc", apiKey: "axk_secret" }));
+
+  const worker = startWorkerServer({ port: 0, process: async () => {}, context: { configPath } });
+  try {
+    const base = `http://localhost:${worker.server.port}`;
+    const page = await fetch(`${base}/`);
+    expect(page.headers.get("content-type")).toContain("text/html");
+    expect(await page.text()).toContain("aznex worker settings");
+
+    const before = await (await fetch(`${base}/api/settings`)).text();
+    expect(before).not.toContain("axk_secret");
+
+    const post = await fetch(`${base}/api/settings`, {
+      method: "POST",
+      body: JSON.stringify({ extractModel: "claude-haiku-4-5", apiKey: "axk_evil" }),
+    });
+    expect(post.status).toBe(200);
+    const after = (await post.json()) as { effective: Record<string, unknown> };
+    expect(after.effective["extractModel"]).toBe("claude-haiku-4-5");
+    expect(JSON.stringify(after)).not.toContain("axk_");
+  } finally {
+    await worker.stop();
+  }
+});
+
 test("hook adapter exits 0 even when the worker is unreachable", async () => {
   const proc = Bun.spawn(["bun", `${import.meta.dir}/../hooks/claude-code-hook.ts`], {
     env: { ...process.env, AZNEX_WORKER_URL: "http://localhost:1" },
