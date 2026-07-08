@@ -1,6 +1,6 @@
 {
   "name": "@aznex/shared",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Aznex shared types, data model, API contracts, secret scanning, repo fingerprinting",
   "license": "MIT",
   "repository": {
