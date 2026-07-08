@@ -1,0 +1,68 @@
+{
+  "description": "Aznex team-memory hooks — thin curl relays to the local aznex worker (npx aznex-worker setup). Mirrors packages/worker/src/claude-settings.ts; keep the two in sync.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "shell": "bash",
+            "command": "curl -sf -m 5 -X POST -H 'Content-Type: application/json' --data-binary @- \"${AZNEX_WORKER_URL:-http://localhost:29639}/context\" || echo '{\"systemMessage\":\"aznex worker not reachable — run: npx aznex-worker setup\"}'",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "shell": "bash",
+            "command": "curl -sf -m 2 -X POST -H 'Content-Type: application/json' --data-binary @- \"${AZNEX_WORKER_URL:-http://localhost:29639}/file-context\" || true",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "shell": "bash",
+            "command": "curl -sf -m 2 -X POST -H 'Content-Type: application/json' --data-binary @- \"${AZNEX_WORKER_URL:-http://localhost:29639}/hook\" >/dev/null || true",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "shell": "bash",
+            "command": "curl -sf -m 2 -X POST -H 'Content-Type: application/json' --data-binary @- \"${AZNEX_WORKER_URL:-http://localhost:29639}/hook\" >/dev/null || true",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "shell": "bash",
+            "command": "curl -sf -m 2 -X POST -H 'Content-Type: application/json' --data-binary @- \"${AZNEX_WORKER_URL:-http://localhost:29639}/hook\" >/dev/null || true",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

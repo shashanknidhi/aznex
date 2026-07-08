@@ -1,0 +1,12 @@
+{
+  "name": "aznex",
+  "version": "0.1.5",
+  "description": "Team-shared institutional memory for coding agents — repo-scoped, agent-agnostic, MCP-served",
+  "author": {
+    "name": "Shashank Nidhi"
+  },
+  "repository": "https://github.com/shashanknidhi/aznex",
+  "license": "MIT",
+  "keywords": ["claude", "claude-code", "memory", "team", "mcp", "plugin"],
+  "homepage": "https://github.com/shashanknidhi/aznex#readme"
+}

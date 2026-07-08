@@ -1,0 +1,17 @@
+{
+  "name": "aznex",
+  "owner": {
+    "name": "Shashank Nidhi"
+  },
+  "metadata": {
+    "description": "Aznex — team-shared institutional memory for coding agents"
+  },
+  "plugins": [
+    {
+      "name": "aznex",
+      "version": "0.1.5",
+      "source": "./plugin",
+      "description": "Team-shared memory for Claude Code — captures session learnings and injects team context"
+    }
+  ]
+}
