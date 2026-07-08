@@ -7,6 +7,8 @@ import { ApiKeyRepository } from "../repositories/api-key.js";
 import { RepoRepository } from "../repositories/repo.js";
 import { GithubInstallationRepository } from "../repositories/github-installation.js";
 import { MemoryRepository } from "../repositories/memory.js";
+import { MemoryAnchorRepository } from "../repositories/memory-anchor.js";
+import { SessionRepository } from "../repositories/session.js";
 import { hashToken } from "../middleware/auth.js";
 import { clearRepoAccessCache } from "../auth/repo-access.js";
 
@@ -64,6 +66,13 @@ function seed() {
   memories.setPromotion("shared_stale", "team_shared");
   memories.setFreshness("shared_stale", "stale_suspected");
   // private_fresh stays promotion_state=private
+  new MemoryAnchorRepository(db).upsert({ memory_id: "shared_fresh_new", path: "src/auth.ts", commit_sha: null });
+  new MemoryAnchorRepository(db).upsert({ memory_id: "shared_stale", path: "src/auth.ts", commit_sha: null });
+  new SessionRepository(db).create({
+    id: "sess_1", repo_fingerprint: FP, repo_canonical: "acme/widget", agent: "claude-code",
+    author_id: user.id, platform_source: "hook", status: "completed",
+    started_at_epoch: 1000, ended_at_epoch: 2000, metadata: {},
+  });
 
   return { db, app: createApp(db) };
 }
@@ -151,5 +160,46 @@ test("tools are listed", async () => {
   });
   const rpc = (await res.json()) as any;
   const names = rpc.result.tools.map((t: any) => t.name).sort();
-  expect(names).toEqual(["get_recent_context", "search_memory"]);
+  expect(names).toEqual([
+    "get_memories_by_path",
+    "get_memory",
+    "get_recent_context",
+    "list_sessions",
+    "search_memory",
+  ]);
+});
+
+test("get_memory returns the full record with anchors; hides others' private", async () => {
+  const { app } = seed();
+  const full = await toolPayload(await callTool(app, "get_memory", { id: "shared_fresh_new" }));
+  expect(full.content).toBe("auth middleware verifies bearer tokens");
+  expect(full.anchors).toEqual([{ memory_id: "shared_fresh_new", path: "src/auth.ts", commit_sha: null }]);
+
+  // author's own private record is visible (same rule as the REST detail route)
+  const own = await toolPayload(await callTool(app, "get_memory", { id: "private_fresh" }));
+  expect(own.id).toBe("private_fresh");
+
+  const missing = (await (await callTool(app, "get_memory", { id: "nope" })).json()) as any;
+  expect(missing.result.isError).toBe(true);
+});
+
+test("get_memories_by_path: fresh by default, stale on request, repo-scoped", async () => {
+  const { app } = seed();
+  const fresh = await toolPayload(
+    await callTool(app, "get_memories_by_path", { repo_fingerprint: FP, path: "src/auth.ts" }),
+  );
+  expect(fresh.items.map((i: any) => i.id)).toEqual(["shared_fresh_new"]);
+
+  const withStale = await toolPayload(
+    await callTool(app, "get_memories_by_path", { repo_fingerprint: FP, path: "src/auth.ts", include_stale: true }),
+  );
+  expect(withStale.items.map((i: any) => i.id).sort()).toEqual(["shared_fresh_new", "shared_stale"]);
+});
+
+test("list_sessions returns the repo timeline", async () => {
+  const { app } = seed();
+  const payload = await toolPayload(await callTool(app, "list_sessions", { repo_fingerprint: FP }));
+  expect(payload.items).toEqual([
+    { id: "sess_1", agent: "claude-code", started_at_epoch: 1000, ended_at_epoch: 2000 },
+  ]);
 });
