@@ -61,6 +61,53 @@ export function registerMemoryRoutes(app: Hono<AppEnv>, auth: Auth | null): void
     });
   });
 
+  // Worker read path for hook-driven context injection (SessionStart). REST
+  // twin of the MCP get_recent_context tool: team_shared + fresh only.
+  app.get("/memories/context", sessionOrApiKeyAuth(auth), async (c) => {
+    const fingerprint = c.req.query("repo_fingerprint");
+    if (!fingerprint) return c.json({ error: "repo_fingerprint required" }, 400);
+    const limit = Math.min(Math.max(1, Number(c.req.query("limit") ?? 10) || 10), 50);
+
+    const db = c.get("db");
+    const repo = new RepoRepository(db).getActiveByFingerprint(fingerprint);
+    if (!repo) return c.json({ error: "unknown_repo" }, 403);
+    const access = await verifyRepoAccess({ user: c.get("user"), repo, config: loadConfig() });
+    if (!access.allowed) return c.json({ error: "forbidden" }, 403);
+
+    const items = new MemoryRepository(db).listByRepo(fingerprint, limit, {
+      promotionState: "team_shared",
+      freshnessState: "fresh",
+    });
+    return c.json({ items: items.map((m) => ({ id: m.id, type: m.type, content: m.content })) });
+  });
+
+  // Worker read path for PreToolUse(Read) file-context: memories anchored to a
+  // repo-relative path. Anchors aren't repo-scoped, so filter by fingerprint here.
+  app.get("/memories/by-path", sessionOrApiKeyAuth(auth), async (c) => {
+    const fingerprint = c.req.query("repo_fingerprint");
+    const path = c.req.query("path");
+    if (!fingerprint || !path) return c.json({ error: "repo_fingerprint and path required" }, 400);
+
+    const db = c.get("db");
+    const repo = new RepoRepository(db).getActiveByFingerprint(fingerprint);
+    if (!repo) return c.json({ error: "unknown_repo" }, 403);
+    const access = await verifyRepoAccess({ user: c.get("user"), repo, config: loadConfig() });
+    if (!access.allowed) return c.json({ error: "forbidden" }, 403);
+
+    const memories = new MemoryRepository(db);
+    const items = new MemoryAnchorRepository(db)
+      .listByPath(path)
+      .map((a) => memories.getById(a.memory_id))
+      .filter(
+        (m): m is Memory =>
+          m !== null &&
+          m.repo_fingerprint === fingerprint &&
+          m.promotion_state === "team_shared" &&
+          m.freshness_state === "fresh",
+      );
+    return c.json({ items: items.map((m) => ({ id: m.id, type: m.type, content: m.content })) });
+  });
+
   app.get("/memories/:id", sessionOrApiKeyAuth(auth), async (c) => {
     const db = c.get("db");
     const memory = new MemoryRepository(db).getById(c.req.param("id"));

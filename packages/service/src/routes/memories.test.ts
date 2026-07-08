@@ -78,7 +78,7 @@ function seed(memoryCount = 3) {
   });
   db.prepare("UPDATE memory SET created_at_epoch = ? WHERE id = ?").run(10, "mem_own_private");
   new MemoryAnchorRepository(db).upsert({ memory_id: "mem_1", path: "src/cache.ts", commit_sha: "abc" });
-  return { db, app: createApp(db) };
+  return { db, app: createApp(db), user };
 }
 
 function get(app: ReturnType<typeof createApp>, path: string, token = TOKEN) {
@@ -143,6 +143,66 @@ test("unknown or others'-private id → 404; own private → 200", async () => {
   expect((await get(app, "/api/memories/nope")).status).toBe(404);
   expect((await get(app, "/api/memories/mem_private")).status).toBe(404);
   expect((await get(app, "/api/memories/mem_own_private")).status).toBe(200);
+});
+
+test("context: team_shared+fresh only, capped by limit", async () => {
+  const { db, app } = seed();
+  db.prepare("UPDATE memory SET freshness_state = 'stale_suspected' WHERE id = ?").run("mem_3");
+
+  const res = await get(app, `/api/memories/context?repo_fingerprint=${encodeURIComponent(FP)}`);
+  expect(res.status).toBe(200);
+  const body = (await res.json()) as any;
+  // mem_3 stale, both privates excluded — even the caller's own
+  expect(body.items.map((m: any) => m.id)).toEqual(["mem_2", "mem_1"]);
+
+  const limited = (await (
+    await get(app, `/api/memories/context?repo_fingerprint=${encodeURIComponent(FP)}&limit=1`)
+  ).json()) as any;
+  expect(limited.items.length).toBe(1);
+});
+
+test("context: missing fingerprint → 400, unknown repo → 403, unauth → 401", async () => {
+  const { app } = seed();
+  expect((await get(app, "/api/memories/context")).status).toBe(400);
+  expect((await get(app, "/api/memories/context?repo_fingerprint=github.com/none/none")).status).toBe(403);
+  expect((await get(app, `/api/memories/context?repo_fingerprint=${FP}`, "wrong")).status).toBe(401);
+});
+
+test("by-path: anchored team_shared+fresh memories for this repo only", async () => {
+  const { db, app, user } = seed();
+  const memories = new MemoryRepository(db);
+  // same path anchored from another repo — must not leak in
+  memories.create({
+    id: "mem_other_repo", repo_fingerprint: "github.com/acme/other", session_id: null, author_id: user.id,
+    agent: "claude-code", kind: "observation", type: "extracted_learning",
+    title: null, content: "other repo note", narrative: null,
+    facts: [], concepts: [], files_read: [], files_modified: [],
+    confirmed_commit: null, ai_extracted: true, metadata: {},
+  });
+  memories.setPromotion("mem_other_repo", "team_shared");
+  const anchors = new MemoryAnchorRepository(db);
+  anchors.upsert({ memory_id: "mem_other_repo", path: "src/cache.ts", commit_sha: null });
+  // non-shared anchored memory must not appear either
+  anchors.upsert({ memory_id: "mem_own_private", path: "src/cache.ts", commit_sha: null });
+
+  const res = await get(
+    app,
+    `/api/memories/by-path?repo_fingerprint=${encodeURIComponent(FP)}&path=${encodeURIComponent("src/cache.ts")}`,
+  );
+  expect(res.status).toBe(200);
+  const body = (await res.json()) as any;
+  expect(body.items.map((m: any) => m.id)).toEqual(["mem_1"]);
+
+  const none = (await (
+    await get(app, `/api/memories/by-path?repo_fingerprint=${encodeURIComponent(FP)}&path=nope.ts`)
+  ).json()) as any;
+  expect(none.items).toEqual([]);
+});
+
+test("by-path: missing params → 400", async () => {
+  const { app } = seed();
+  expect((await get(app, `/api/memories/by-path?repo_fingerprint=${FP}`)).status).toBe(400);
+  expect((await get(app, "/api/memories/by-path?path=x")).status).toBe(400);
 });
 
 function post(app: ReturnType<typeof createApp>, path: string, token = TOKEN) {
