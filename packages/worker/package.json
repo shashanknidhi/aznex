@@ -1,6 +1,6 @@
 {
   "name": "@aznex/worker",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "Aznex local worker \u2014 captures coding-agent sessions, extracts memories via your Claude subscription, scrubs secrets, ships them to your team's Aznex service",
   "license": "MIT",
   "repository": {
