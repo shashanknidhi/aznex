@@ -13,10 +13,25 @@ export interface WorkerConfig {
   apiKey: string | null;
   workerPort: number;
   claudePath: string | null;
+  extractModel: string | null;
+  contextEnabled: boolean;
+  contextMemoryCount: number;
+  fileContextEnabled: boolean;
+}
+
+interface ConfigFile {
+  serviceUrl?: string;
+  apiKey?: string;
+  workerPort?: number;
+  claudePath?: string;
+  extractModel?: string;
+  contextEnabled?: boolean;
+  contextMemoryCount?: number;
+  fileContextEnabled?: boolean;
 }
 
 export function loadWorkerConfig(configPath = CONFIG_PATH): WorkerConfig {
-  let file: { serviceUrl?: string; apiKey?: string; workerPort?: number; claudePath?: string } = {};
+  let file: ConfigFile = {};
   if (existsSync(configPath)) {
     try {
       file = JSON.parse(readFileSync(configPath, "utf-8"));
@@ -31,5 +46,11 @@ export function loadWorkerConfig(configPath = CONFIG_PATH): WorkerConfig {
     // 3000-3010 dev-server belt where collisions are silent and confusing.
     workerPort: Number(process.env["AZNEX_WORKER_PORT"] ?? file.workerPort ?? 29639),
     claudePath: process.env["CLAUDE_CODE_PATH"] ?? file.claudePath ?? null,
+    extractModel: process.env["AZNEX_EXTRACT_MODEL"] ?? file.extractModel ?? null,
+    // Context-injection knobs are file-only (set via the settings page) —
+    // no env vars until someone actually needs them.
+    contextEnabled: file.contextEnabled ?? true,
+    contextMemoryCount: file.contextMemoryCount ?? 10,
+    fileContextEnabled: file.fileContextEnabled ?? true,
   };
 }
