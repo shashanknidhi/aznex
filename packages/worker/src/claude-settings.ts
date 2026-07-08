@@ -1,9 +1,17 @@
-// Pure merge of the aznex capture hooks into a Claude Code settings.json
-// object — setup.ts applies it to ~/.claude/settings.json so capture works in
-// every repo without per-project setup. Idempotent: an event that already has
-// a hook with the same command is left untouched.
+// Pure merge of the aznex hooks into a Claude Code settings.json object —
+// setup.ts applies it to ~/.claude/settings.json so capture works in every
+// repo without per-project setup. Idempotent: an event that already has a
+// hook with the same command is left untouched, so re-running setup on an
+// older install only adds the new events.
 
-const HOOK_EVENTS = ["PostToolUse", "Stop"] as const;
+// Mirrors plugin/hooks/hooks.json — keep the two in sync.
+const HOOKS = [
+  { event: "PostToolUse" },
+  { event: "Stop" },
+  { event: "SessionEnd" }, // pipeline already finalizes on it; registration was the only gap
+  { event: "SessionStart", matcher: "startup|clear|compact", arg: "context" },
+  { event: "PreToolUse", matcher: "Read", arg: "file-context" },
+] as const;
 
 interface HookEntry {
   matcher?: string;
@@ -18,12 +26,16 @@ export function mergeClaudeSettings(
   const hooks = (out["hooks"] ??= {}) as Record<string, HookEntry[]>;
   const added: string[] = [];
 
-  for (const event of HOOK_EVENTS) {
-    const entries = (hooks[event] ??= []);
-    const present = entries.some((e) => e.hooks?.some((h) => h.command === hookCommand));
+  for (const hook of HOOKS) {
+    const command = "arg" in hook ? `${hookCommand} ${hook.arg}` : hookCommand;
+    const entries = (hooks[hook.event] ??= []);
+    const present = entries.some((e) => e.hooks?.some((h) => h.command === command));
     if (!present) {
-      entries.push({ hooks: [{ type: "command", command: hookCommand }] });
-      added.push(event);
+      entries.push({
+        ...("matcher" in hook ? { matcher: hook.matcher } : {}),
+        hooks: [{ type: "command", command }],
+      });
+      added.push(hook.event);
     }
   }
   return { settings: out, added };

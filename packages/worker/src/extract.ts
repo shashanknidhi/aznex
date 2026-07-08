@@ -58,15 +58,22 @@ export function findClaude(configPath?: string): string {
   throw new Error("claude executable not found. Install Claude Code or set CLAUDE_CODE_PATH.");
 }
 
+// Exported for tests: the spawn argv, including --model only when configured
+// (unset = the CLI's own default).
+export function buildClaudeArgs(claudePath: string, promptPath: string, observationsPath: string, model: string | null): string[] {
+  return [
+    claudePath, "-p",
+    "--output-format", "json",
+    "--allowedTools", "Read",
+    ...(model ? ["--model", model] : []),
+    "--system-prompt-file", promptPath,
+    `Read the session transcript at ${observationsPath} and extract memory records as a JSON array.`,
+  ];
+}
+
 const defaultRunner: ExtractionRunner = async (promptPath, observationsPath) => {
   const proc = Bun.spawn(
-    [
-      findClaude(), "-p",
-      "--output-format", "json",
-      "--allowedTools", "Read",
-      "--system-prompt-file", promptPath,
-      `Read the session transcript at ${observationsPath} and extract memory records as a JSON array.`,
-    ],
+    buildClaudeArgs(findClaude(), promptPath, observationsPath, loadWorkerConfig().extractModel),
     { stdout: "pipe", stderr: "pipe" },
   );
   const [stdout, stderr] = await Promise.all([
@@ -113,7 +120,7 @@ export async function extractMemories(
         ai_extracted: true,
         confirmed_commit: null,
         // Provenance: which prompt/model produced this record.
-        metadata: { prompt_version: EXTRACTION_PROMPT_VERSION, model: process.env["AZNEX_EXTRACT_MODEL"] ?? "claude-default" },
+        metadata: { prompt_version: EXTRACTION_PROMPT_VERSION, model: loadWorkerConfig().extractModel ?? "claude-default" },
         created_at_epoch: now,
         updated_at_epoch: now,
       }),

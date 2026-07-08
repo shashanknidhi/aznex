@@ -110,6 +110,59 @@ test("hook adapter script forwards stdin payload to the worker", async () => {
   }
 });
 
+test("POST /context relays the handler output; empty result → empty body", async () => {
+  const worker = startWorkerServer({
+    port: 0,
+    process: async () => {},
+    // nonexistent config → handler returns the setup pointer (deterministic, no network)
+    context: { configPath: "/nonexistent/config.json" },
+  });
+  try {
+    const base = `http://localhost:${worker.server.port}`;
+    const res = await fetch(`${base}/context`, {
+      method: "POST",
+      body: JSON.stringify({ session_id: "s1", cwd: "/tmp", source: "startup" }),
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ systemMessage: "aznex not configured — run: npx aznex-worker setup" });
+
+    // file-context is silent when unconfigured — empty body, not JSON
+    const fc = await fetch(`${base}/file-context`, {
+      method: "POST",
+      body: JSON.stringify({ session_id: "s1", cwd: "/tmp", tool_input: { file_path: "/tmp/a.ts" } }),
+    });
+    expect(fc.status).toBe(200);
+    expect(await fc.text()).toBe("");
+
+    expect((await fetch(`${base}/context`, { method: "POST", body: "not json" })).status).toBe(400);
+  } finally {
+    await worker.stop();
+  }
+});
+
+test("hook adapter relays context response body to stdout", async () => {
+  const worker = startWorkerServer({
+    port: 0,
+    process: async () => {},
+    context: { configPath: "/nonexistent/config.json" },
+  });
+  try {
+    const proc = Bun.spawn(
+      ["bun", `${import.meta.dir}/../hooks/claude-code-hook.ts`, "context"],
+      {
+        env: { ...process.env, AZNEX_WORKER_URL: `http://localhost:${worker.server.port}` },
+        stdin: new TextEncoder().encode(JSON.stringify({ session_id: "s1", cwd: "/tmp" })),
+        stdout: "pipe",
+      },
+    );
+    const [code, out] = await Promise.all([proc.exited, new Response(proc.stdout).text()]);
+    expect(code).toBe(0);
+    expect(JSON.parse(out)).toEqual({ systemMessage: "aznex not configured — run: npx aznex-worker setup" });
+  } finally {
+    await worker.stop();
+  }
+});
+
 test("hook adapter exits 0 even when the worker is unreachable", async () => {
   const proc = Bun.spawn(["bun", `${import.meta.dir}/../hooks/claude-code-hook.ts`], {
     env: { ...process.env, AZNEX_WORKER_URL: "http://localhost:1" },
