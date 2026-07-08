@@ -24,17 +24,24 @@ switch (cmd) {
     break;
   }
   case "hook": {
-    await (await import("./hooks/claude-code-hook.js")).forwardHook();
+    await (await import("./hooks/claude-code-hook.js")).forwardHook(rest[0]);
     process.exit(0);
+    break;
+  }
+  case "doctor": {
+    const { runChecks, printReport } = await import("./src/doctor.js");
+    process.exit(printReport(await runChecks()));
     break;
   }
   default: {
     console.log(`aznex-worker — Aznex local capture worker
 
 usage:
-  aznex-worker setup --service-url <url> [--api-key]   install (daemon + hooks + config)
+  aznex-worker setup --service-url <url> [--api-key] [--agents claude-code]
+                                                              install everything (config + daemon + hooks + MCP)
+  aznex-worker doctor                                         check the install (read-only, exit 1 on failure)
   aznex-worker serve                                          run the worker in the foreground
-  aznex-worker hook                                           forward a hook event from stdin
+  aznex-worker hook [context|file-context]                    forward a hook event from stdin
   aznex-worker uninstall                                      remove the daemon`);
     process.exit(cmd === "help" ? 0 : 1);
   }

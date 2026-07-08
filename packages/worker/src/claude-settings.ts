@@ -18,25 +18,42 @@ interface HookEntry {
   hooks: { type: string; command: string }[];
 }
 
+// An entry is "ours" if it invokes our hook script with the same trailing arg
+// — regardless of install location. Re-running setup from a different install
+// (npm global vs clone) must UPDATE the path, not append a duplicate hook
+// (duplicates double capture and context injection).
+function isOurs(command: string, arg: string | undefined): boolean {
+  const match = command.match(/claude-code-hook\.ts(?: (context|file-context))?$/);
+  return match !== null && match[1] === arg;
+}
+
 export function mergeClaudeSettings(
   settings: Record<string, unknown>,
   hookCommand: string,
-): { settings: Record<string, unknown>; added: string[] } {
+): { settings: Record<string, unknown>; added: string[]; updated: string[] } {
   const out = structuredClone(settings);
   const hooks = (out["hooks"] ??= {}) as Record<string, HookEntry[]>;
   const added: string[] = [];
+  const updated: string[] = [];
 
   for (const hook of HOOKS) {
-    const command = "arg" in hook ? `${hookCommand} ${hook.arg}` : hookCommand;
+    const arg = "arg" in hook ? hook.arg : undefined;
+    const command = arg ? `${hookCommand} ${arg}` : hookCommand;
     const entries = (hooks[hook.event] ??= []);
-    const present = entries.some((e) => e.hooks?.some((h) => h.command === command));
-    if (!present) {
-      entries.push({
-        ...("matcher" in hook ? { matcher: hook.matcher } : {}),
-        hooks: [{ type: "command", command }],
-      });
-      added.push(hook.event);
-    }
+
+    const ours = entries.flatMap((e) => e.hooks ?? []).filter((h) => isOurs(h.command, arg));
+    const alreadyExact = ours.length === 1 && ours[0]!.command === command;
+    if (alreadyExact) continue;
+
+    // Remove every entry of ours (stale paths, duplicates), keep foreign hooks.
+    hooks[hook.event] = entries
+      .map((e) => ({ ...e, hooks: (e.hooks ?? []).filter((h) => !isOurs(h.command, arg)) }))
+      .filter((e) => e.hooks.length > 0);
+    hooks[hook.event]!.push({
+      ...("matcher" in hook ? { matcher: hook.matcher } : {}),
+      hooks: [{ type: "command", command }],
+    });
+    (ours.length > 0 ? updated : added).push(hook.event);
   }
-  return { settings: out, added };
+  return { settings: out, added, updated };
 }

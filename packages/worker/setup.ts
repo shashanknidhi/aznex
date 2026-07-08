@@ -1,18 +1,19 @@
 #!/usr/bin/env bun
 // aznex-worker setup — one-command developer install.
 //
-//   aznex-worker setup --service-url https://aznex.up.railway.app [--api-key]
+//   aznex-worker setup --service-url https://aznex.up.railway.app [--api-key] [--agents claude-code]
 //   aznex-worker setup --uninstall
 //
-// Does four things: validates the service URL + API key against the live
-// service, writes ~/.aznex/config.json (0600 — the daemon can't see shell
-// env), installs the login daemon, and wires the Claude Code capture hooks
-// globally. Prints the MCP command for reads at the end.
+// Everything in one shot: validates the service URL + API key against the
+// live service, writes ~/.aznex/config.json (0600 — the daemon can't see
+// shell env), installs the login daemon, wires the per-agent integration
+// (Claude Code: capture hooks + MCP registration), and smoke-tests the
+// worker. `curl <SERVICE_URL>/install.sh | bash` wraps this.
 import { dirname, join } from "path";
 import { homedir } from "os";
 import { existsSync, mkdirSync, readFileSync, writeFileSync, chmodSync } from "fs";
 import { createInterface } from "readline/promises";
-import { CONFIG_PATH } from "./src/config.js";
+import { CONFIG_PATH, loadWorkerConfig } from "./src/config.js";
 import { mergeClaudeSettings } from "./src/claude-settings.js";
 import { findClaude } from "./src/extract.js";
 import { browserAuth } from "./src/browser-auth.js";
@@ -20,6 +21,32 @@ import { installDaemon, uninstallDaemon } from "./daemon/install.js";
 import { LOG_FILE } from "./daemon/templates.js";
 
 const CLAUDE_SETTINGS = join(homedir(), ".claude", "settings.json");
+
+// One integration per coding agent; Claude Code is the only one implemented.
+// A future multi-select prompt slots in here without restructuring setup.
+export const SUPPORTED_AGENTS = ["claude-code"] as const;
+const PLANNED_AGENTS = ["codex", "cursor", "gemini-cli"];
+
+export function parseAgents(value: string | undefined): string[] {
+  const agents = (value ?? "claude-code").split(",").map((a) => a.trim()).filter(Boolean);
+  for (const agent of agents) {
+    if (!(SUPPORTED_AGENTS as readonly string[]).includes(agent)) {
+      const hint = PLANNED_AGENTS.includes(agent) ? "coming soon" : "unknown agent";
+      throw new Error(`--agents ${agent}: ${hint}. Supported today: ${SUPPORTED_AGENTS.join(", ")}`);
+    }
+  }
+  return agents;
+}
+
+export function buildMcpAddArgs(claudePath: string, serviceUrl: string, apiKey: string): string[] {
+  return [
+    claudePath, "mcp", "add", "aznex",
+    "-s", "user",
+    "--transport", "http",
+    `${serviceUrl}/mcp`,
+    "--header", `Authorization: Bearer ${apiKey}`,
+  ];
+}
 
 async function ask(question: string): Promise<string> {
   const rl = createInterface({ input: process.stdin, output: process.stdout });
@@ -48,6 +75,14 @@ export async function runSetup(args: string[]): Promise<void> {
     console.log(`daemon removed: ${uninstallDaemon()}`);
     console.log(`(kept ${CONFIG_PATH} and Claude hooks — delete manually if wanted)`);
     return;
+  }
+
+  let agents: string[];
+  try {
+    agents = parseAgents(flag("agents"));
+  } catch (err) {
+    console.error(`✗ ${err instanceof Error ? err.message : err}`);
+    process.exit(1);
   }
 
   // Extraction spawns the local `claude` binary — resolve it NOW, in the
@@ -98,6 +133,30 @@ export async function runSetup(args: string[]): Promise<void> {
   const unit = installDaemon();
   console.log(`  ${unit} (logs: ${LOG_FILE})`);
 
+  for (const agent of agents) {
+    if (agent === "claude-code") await integrateClaudeCode(claudePath, serviceUrl, apiKey);
+  }
+
+  await smokeTestWorker();
+
+  console.log(`
+✓ setup complete — capture, context injection, and MCP reads are live.
+
+First success:
+  1. Open a Claude Code session in a repo your admin onboarded — a
+     "# Team memory (aznex)" block appears at session start.
+  2. Work normally, end the session — your extracted memories show up in the
+     viewer (${serviceUrl}) within a minute.
+
+Tune the worker (extraction model, context injection): http://localhost:${loadWorkerConfig().workerPort}
+Check the install anytime: aznex-worker doctor
+
+Other agents (Codex, …): point their MCP config at ${serviceUrl}/mcp with the
+same Authorization header — capture hooks for them are coming soon.
+`);
+}
+
+async function integrateClaudeCode(claudePath: string, serviceUrl: string, apiKey: string): Promise<void> {
   console.log(`→ wiring Claude Code hooks in ${CLAUDE_SETTINGS}`);
   // Absolute bun path + absolute script path: hooks and daemons run without
   // your shell PATH, and this works from a global npm/bun install or a clone.
@@ -106,24 +165,46 @@ export async function runSetup(args: string[]): Promise<void> {
   const existing = existsSync(CLAUDE_SETTINGS)
     ? (JSON.parse(readFileSync(CLAUDE_SETTINGS, "utf-8")) as Record<string, unknown>)
     : {};
-  const { settings, added } = mergeClaudeSettings(existing, hookCommand);
-  if (added.length > 0) {
+  const { settings, added, updated } = mergeClaudeSettings(existing, hookCommand);
+  if (added.length > 0 || updated.length > 0) {
     mkdirSync(dirname(CLAUDE_SETTINGS), { recursive: true });
     writeFileSync(CLAUDE_SETTINGS, JSON.stringify(settings, null, 2) + "\n");
-    console.log(`  added hooks: ${added.join(", ")}`);
+    if (added.length > 0) console.log(`  added hooks: ${added.join(", ")}`);
+    if (updated.length > 0) console.log(`  updated hooks to this install: ${updated.join(", ")}`);
   } else {
     console.log("  hooks already present — unchanged");
   }
 
-  console.log(`
-✓ setup complete. Capture is live for Claude Code sessions.
+  console.log("→ registering MCP server (reads)");
+  const mcp = (args: string[]) => Bun.spawnSync(args, { stdout: "pipe", stderr: "pipe" });
+  let result = mcp(buildMcpAddArgs(claudePath, serviceUrl, apiKey));
+  if (result.exitCode !== 0 && result.stderr.toString().includes("already exists")) {
+    // Re-run or key rotation: replace the stale registration.
+    mcp([claudePath, "mcp", "remove", "aznex", "-s", "user"]);
+    result = mcp(buildMcpAddArgs(claudePath, serviceUrl, apiKey));
+  }
+  if (result.exitCode === 0) {
+    console.log(`  ✓ MCP registered (aznex → ${serviceUrl}/mcp)`);
+  } else {
+    // Fail open — capture still works; hand the user the manual command.
+    console.warn(`  ! MCP registration failed: ${result.stderr.toString().trim().slice(0, 200)}`);
+    console.warn(`  register manually:\n    claude mcp add aznex -s user --transport http ${serviceUrl}/mcp --header "Authorization: Bearer ${apiKey}"`);
+  }
+}
 
-For reads (any MCP-capable agent):
-  Claude Code:
-    claude mcp add aznex -s user --transport http ${serviceUrl}/mcp --header "Authorization: Bearer ${apiKey}"
-    (-s user makes it available in every repo; re-running? \`claude mcp remove aznex\` first)
-  Codex / other agents: point their MCP config at ${serviceUrl}/mcp with the same Authorization header.
-`);
+async function smokeTestWorker(): Promise<void> {
+  const port = loadWorkerConfig().workerPort;
+  console.log("→ verifying worker…");
+  for (let i = 0; i < 10; i++) {
+    const res = await fetch(`http://localhost:${port}/health`, { signal: AbortSignal.timeout(1000) }).catch(() => null);
+    if (res?.ok) {
+      console.log(`  ✓ worker ready at http://localhost:${port}`);
+      return;
+    }
+    await Bun.sleep(500);
+  }
+  console.warn(`  ! worker not responding yet on port ${port} — it may still be starting.`);
+  console.warn(`    check: tail ${LOG_FILE}  ·  restart: launchctl kickstart -k gui/$(id -u)/ai.aznex.worker (macOS) / systemctl --user restart aznex-worker (Linux)`);
 }
 
 if (import.meta.main) await runSetup(process.argv.slice(2));
