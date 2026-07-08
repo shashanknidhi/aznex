@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "aznex": {
+      "type": "stdio",
+      "command": "bash",
+      "args": [
+        "-c",
+        "PATH=\"$HOME/.bun/bin:$PATH\" exec aznex-worker mcp"
+      ]
+    }
+  }
+}

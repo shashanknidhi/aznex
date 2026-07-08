@@ -157,6 +157,14 @@ same Authorization header — capture hooks for them are coming soon.
 }
 
 async function integrateClaudeCode(claudePath: string, serviceUrl: string, apiKey: string): Promise<void> {
+  const { aznexPluginInstalled } = await import("./src/doctor.js");
+  if (aznexPluginInstalled()) {
+    // Plugin machines get hooks + MCP from the plugin bundle — wiring them
+    // here too would double hook fire and duplicate the MCP server.
+    console.log("→ aznex Claude Code plugin detected — it provides hooks + MCP; skipping settings.json wiring");
+    return;
+  }
+
   console.log(`→ wiring Claude Code hooks in ${CLAUDE_SETTINGS}`);
   // Absolute bun path + absolute script path: hooks and daemons run without
   // your shell PATH, and this works from a global npm/bun install or a clone.

@@ -28,6 +28,10 @@ switch (cmd) {
     process.exit(0);
     break;
   }
+  case "mcp": {
+    await (await import("./src/mcp-proxy.js")).runMcpProxy();
+    break;
+  }
   case "doctor": {
     const { runChecks, printReport } = await import("./src/doctor.js");
     process.exit(printReport(await runChecks()));
@@ -40,6 +44,7 @@ usage:
   aznex-worker setup --service-url <url> [--api-key] [--agents claude-code]
                                                               install everything (config + daemon + hooks + MCP)
   aznex-worker doctor                                         check the install (read-only, exit 1 on failure)
+  aznex-worker mcp                                            stdio→HTTP MCP proxy (used by the Claude Code plugin)
   aznex-worker serve                                          run the worker in the foreground
   aznex-worker hook [context|file-context]                    forward a hook event from stdin
   aznex-worker uninstall                                      remove the daemon`);
