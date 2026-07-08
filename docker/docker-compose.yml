@@ -7,11 +7,13 @@ services:
       - "3000:3000"
     volumes:
       - aznex-data:/app/data
+    # Copy .env.example → .env at the repo root and fill in GitHub App/OAuth
+    # credentials and BETTER_AUTH_SECRET — see .env.example for the full list.
+    env_file:
+      - ../.env
     environment:
+      # Keep the DB on the volume regardless of what .env says.
       - DATABASE_PATH=/app/data/aznex.db
-      # GitHub App credentials for repo access verification — see .env.example
-      # - GITHUB_APP_ID=
-      # - GITHUB_APP_PRIVATE_KEY=
     restart: unless-stopped
 
 volumes:
