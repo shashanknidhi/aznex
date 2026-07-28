@@ -2,7 +2,8 @@ import { test, expect } from "bun:test";
 import { mkdtempSync, writeFileSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
-import { loadWorkerConfig } from "./config.js";
+import { readFileSync } from "fs";
+import { loadWorkerConfig, writeWorkerConfig } from "./config.js";
 import { mergeClaudeSettings } from "./claude-settings.js";
 
 function tmpConfig(content: string): string {
@@ -16,6 +17,7 @@ test("config file supplies values when env is unset", () => {
   delete process.env["AZNEX_SERVICE_URL"];
   delete process.env["AZNEX_API_KEY"];
   delete process.env["CLAUDE_CODE_PATH"];
+  delete process.env["CODEX_PATH"];
   delete process.env["AZNEX_EXTRACT_MODEL"];
   const path = tmpConfig(JSON.stringify({
     serviceUrl: "https://svc", apiKey: "axk_x", workerPort: 4000, claudePath: "/opt/claude",
@@ -23,7 +25,7 @@ test("config file supplies values when env is unset", () => {
   }));
   const cfg = loadWorkerConfig(path);
   expect(cfg).toEqual({
-    serviceUrl: "https://svc", apiKey: "axk_x", workerPort: 4000, claudePath: "/opt/claude",
+    serviceUrl: "https://svc", apiKey: "axk_x", workerPort: 4000, claudePath: "/opt/claude", codexPath: null,
     extractModel: "claude-haiku-4-5", contextEnabled: false, contextMemoryCount: 5, fileContextEnabled: false,
   });
 });
@@ -45,11 +47,36 @@ test("env vars win over the config file", () => {
 test("missing or malformed config file degrades to nulls and defaults", () => {
   const missing = loadWorkerConfig("/nonexistent/config.json");
   expect(missing).toEqual({
-    serviceUrl: null, apiKey: null, workerPort: 29639, claudePath: null,
+    serviceUrl: null, apiKey: null, workerPort: 29639, claudePath: null, codexPath: null,
     extractModel: null, contextEnabled: true, contextMemoryCount: 10, fileContextEnabled: true,
   });
   const malformed = loadWorkerConfig(tmpConfig("not json{"));
   expect(malformed.serviceUrl).toBe(null);
+});
+
+test("CODEX_PATH env wins over the config file", () => {
+  process.env["CODEX_PATH"] = "/env/codex";
+  const path = tmpConfig(JSON.stringify({ codexPath: "/file/codex" }));
+  expect(loadWorkerConfig(path).codexPath).toBe("/env/codex");
+  delete process.env["CODEX_PATH"];
+  expect(loadWorkerConfig(path).codexPath).toBe("/file/codex");
+});
+
+test("writeWorkerConfig preserves fields it does not set (setup must not wipe tuning)", () => {
+  const path = tmpConfig(JSON.stringify({
+    serviceUrl: "https://old", apiKey: "axk_old", extractModel: "claude-haiku-4-5", contextEnabled: false,
+  }));
+  writeWorkerConfig({ serviceUrl: "https://new", apiKey: "axk_new", codexPath: "/opt/codex" }, path);
+  expect(JSON.parse(readFileSync(path, "utf-8"))).toEqual({
+    serviceUrl: "https://new", apiKey: "axk_new", codexPath: "/opt/codex",
+    extractModel: "claude-haiku-4-5", contextEnabled: false,
+  });
+});
+
+test("writeWorkerConfig replaces a malformed file rather than failing setup", () => {
+  const path = tmpConfig("not json{");
+  writeWorkerConfig({ apiKey: "axk_new" }, path);
+  expect(JSON.parse(readFileSync(path, "utf-8"))).toEqual({ apiKey: "axk_new" });
 });
 
 test("mergeClaudeSettings adds all hook events with matchers and is idempotent", () => {

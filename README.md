@@ -66,14 +66,21 @@ curl -fsSL <SERVICE_URL>/install.sh | bash
 It installs Bun if you don't have it, installs `@aznex/worker`, and runs
 setup: your browser opens for GitHub sign-in (no API key to copy), then it
 writes `~/.aznex/config.json`, installs the background worker daemon (starts
-at login, restarts on crash), wires the Claude Code hooks — capture **and**
-team-memory context injection at session start — and registers the `aznex`
-MCP server for reads. Works in every repo on the machine; sessions in repos
-your admin hasn't onboarded are skipped automatically.
+at login, restarts on crash), wires the capture hooks for every supported
+agent it finds — Claude Code and Codex — including team-memory context
+injection at session start, and registers the `aznex` MCP server for reads.
+Works in every repo on the machine; sessions in repos your admin hasn't
+onboarded are skipped automatically.
 
-**Requirements:** Claude Code (installed and logged in — extraction runs on
-your own subscription). Bun is auto-installed if missing. Headless/CI
+**Requirements:** Claude Code or Codex, installed and logged in — extraction
+runs on your own subscription via whichever CLI is present (Claude Code is
+preferred when both are). Bun is auto-installed if missing. Headless/CI
 machines: pass a pre-minted key via `--api-key`.
+
+Re-running setup is safe and idempotent: it reuses the API key already in
+`~/.aznex/config.json` when that key still works, leaves your tuning
+settings alone, and only re-authorizes if the key is gone or revoked. Pass
+`--new-key` to force a fresh key.
 
 > **Note:** `bun install -g @aznex/worker` alone installs the binary only —
 > it does not authenticate, install the daemon, or register hooks/MCP. Always
@@ -82,10 +89,11 @@ machines: pass a pre-minted key via `--api-key`.
 Verify anytime:
 
 ```sh
-aznex-worker doctor    # ✓/✗ checks: config, daemon, worker, service, key, hooks, MCP
+aznex-worker doctor    # ✓/✗ checks: config, extraction engine, daemon, worker,
+                       # service, key, Claude Code hooks + MCP, Codex hooks + MCP
 ```
 
-First success: open a Claude Code session in an onboarded repo — a
+First success: open a Claude Code or Codex session in an onboarded repo — a
 `# Team memory (aznex)` block appears at session start. End the session and
 your extracted memories show up in the viewer (`<SERVICE_URL>`) within a
 minute. Tune the worker (extraction model, context-injection knobs) at
@@ -105,6 +113,15 @@ npx aznex-worker setup
 ```
 
 See [plugin/README.md](plugin/README.md).
+
+**Codex.** Setup wires Codex automatically when `codex` is on your PATH:
+relays into `~/.codex/hooks.json` for capture and an `[mcp_servers.aznex]`
+block in `~/.codex/config.toml` for reads. One manual step remains — Codex
+runs only hooks you have approved, so start `codex` once and accept the hook
+review prompt. Until you do, Codex sessions capture nothing (and
+`aznex-worker doctor` can't tell, since trust isn't readable from disk).
+File-anchored injection on read stays Claude-Code-only; session-start team
+memory works in both.
 
 **Troubleshooting** — run `aznex-worker doctor` first; it diagnoses the
 common cases with a fix per finding. Beyond that:

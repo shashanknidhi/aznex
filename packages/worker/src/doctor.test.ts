@@ -90,7 +90,7 @@ test("partial hooks → warn naming the missing events", async () => {
     codexHome: "/nonexistent", // isolate from the real ~/.codex
     fetchImpl: okFetch,
   });
-  const hooks = get(results, "hooks");
+  const hooks = get(results, "Claude Code hooks");
   expect(hooks.status).toBe("warn");
   expect(hooks.detail).toContain("SessionStart");
 });
@@ -106,7 +106,7 @@ test("no settings hooks but plugin installed → hooks ok via plugin", async () 
     codexHome: "/nonexistent", // isolate from the real ~/.codex
     fetchImpl: okFetch,
   });
-  const hooks = get(results, "hooks");
+  const hooks = get(results, "Claude Code hooks");
   expect(hooks.status).toBe("ok");
   expect(hooks.detail).toContain("plugin");
 });
@@ -123,7 +123,7 @@ test("MCP registered only project-scope → warn suggesting user scope", async (
     codexHome: "/nonexistent", // isolate from the real ~/.codex
     fetchImpl: okFetch,
   });
-  const mcp = get(results, "MCP (reads)");
+  const mcp = get(results, "Claude Code MCP (reads)");
   expect(mcp.status).toBe("warn");
   expect(mcp.detail).toContain("1 project(s)");
   expect(mcp.fix).toContain("-s user");
@@ -138,7 +138,7 @@ test("MCP unregistered → warn including the add command", async () => {
     codexHome: "/nonexistent", // isolate from the real ~/.codex
     fetchImpl: okFetch,
   });
-  const mcp = get(results, "MCP (reads)");
+  const mcp = get(results, "Claude Code MCP (reads)");
   expect(mcp.status).toBe("warn");
   expect(mcp.fix).toContain("claude mcp add aznex -s user");
 });
