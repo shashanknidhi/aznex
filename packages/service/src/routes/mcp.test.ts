@@ -45,29 +45,23 @@ function seed() {
     github_repo_id: "9001", github_installation_id: 42, status: "active", metadata: {},
   });
 
-  // Mixed visibility fixtures. created_at_epoch is forced to distinct values
-  // so recency ordering is deterministic.
+  // Every memory captured against the repo is readable by every repo member,
+  // so these fixtures differ only in recency. created_at_epoch is forced to
+  // distinct values so ordering is deterministic.
   const memories = new MemoryRepository(db);
   const mk = (id: string, content: string, epoch: number) => {
     memories.create({
       id, repo_fingerprint: FP, session_id: null, author_id: user.id, agent: "claude-code",
       kind: "observation", type: "extracted_learning", title: null, content, narrative: null,
-      facts: [], concepts: [], files_read: [], files_modified: [],
-      confirmed_commit: null, ai_extracted: true, metadata: {},
+      facts: [], concepts: [], files_read: [], files_modified: [], ai_extracted: true, metadata: {},
     });
     db.prepare("UPDATE memory SET created_at_epoch = ? WHERE id = ?").run(epoch, id);
   };
-  mk("shared_fresh_old", "auth tokens rotate hourly", 1000);
-  mk("shared_fresh_new", "auth middleware verifies bearer tokens", 2000);
-  mk("shared_stale", "auth used to be cookie based", 3000);
-  mk("private_fresh", "auth secret note", 4000);
-  memories.setPromotion("shared_fresh_old", "team_shared");
-  memories.setPromotion("shared_fresh_new", "team_shared");
-  memories.setPromotion("shared_stale", "team_shared");
-  memories.setFreshness("shared_stale", "stale_suspected");
-  // private_fresh stays promotion_state=private
-  new MemoryAnchorRepository(db).upsert({ memory_id: "shared_fresh_new", path: "src/auth.ts", commit_sha: null });
-  new MemoryAnchorRepository(db).upsert({ memory_id: "shared_stale", path: "src/auth.ts", commit_sha: null });
+  mk("mem_oldest", "auth tokens rotate hourly", 1000);
+  mk("mem_middle", "auth middleware verifies bearer tokens", 2000);
+  mk("mem_newest", "auth used to be cookie based", 3000);
+  new MemoryAnchorRepository(db).upsert({ memory_id: "mem_middle", path: "src/auth.ts" });
+  new MemoryAnchorRepository(db).upsert({ memory_id: "mem_newest", path: "src/auth.ts" });
   new SessionRepository(db).create({
     id: "sess_1", repo_fingerprint: FP, repo_canonical: "acme/widget", agent: "claude-code",
     author_id: user.id, platform_source: "hook", status: "completed",
@@ -106,30 +100,20 @@ async function toolPayload(res: Response): Promise<any> {
   return JSON.parse(rpc.result.content[0].text);
 }
 
-test("search_memory returns only team_shared + fresh by default", async () => {
+test("search_memory returns every memory in the repo", async () => {
   const { app } = seed();
   const res = await callTool(app, "search_memory", { query: "auth", repo_fingerprint: FP });
   expect(res.status).toBe(200);
   const payload = await toolPayload(res);
   const ids = payload.results.map((r: any) => r.id).sort();
-  expect(ids).toEqual(["shared_fresh_new", "shared_fresh_old"]);
+  expect(ids).toEqual(["mem_middle", "mem_newest", "mem_oldest"]);
 });
 
-test("search_memory include_stale=true adds stale_suspected records", async () => {
-  const { app } = seed();
-  const res = await callTool(app, "search_memory", {
-    query: "auth", repo_fingerprint: FP, include_stale: true,
-  });
-  const ids = (await toolPayload(res)).results.map((r: any) => r.id);
-  expect(ids).toContain("shared_stale");
-  expect(ids).not.toContain("private_fresh");
-});
-
-test("get_recent_context returns team_shared+fresh, newest first", async () => {
+test("get_recent_context returns the repo's memories, newest first", async () => {
   const { app } = seed();
   const res = await callTool(app, "get_recent_context", { repo_fingerprint: FP });
   const items = (await toolPayload(res)).items;
-  expect(items.map((i: any) => i.id)).toEqual(["shared_fresh_new", "shared_fresh_old"]);
+  expect(items.map((i: any) => i.id)).toEqual(["mem_newest", "mem_middle", "mem_oldest"]);
 });
 
 test("unknown repo fingerprint → tool error", async () => {
@@ -169,31 +153,22 @@ test("tools are listed", async () => {
   ]);
 });
 
-test("get_memory returns the full record with anchors; hides others' private", async () => {
+test("get_memory returns the full record with anchors", async () => {
   const { app } = seed();
-  const full = await toolPayload(await callTool(app, "get_memory", { id: "shared_fresh_new" }));
+  const full = await toolPayload(await callTool(app, "get_memory", { id: "mem_middle" }));
   expect(full.content).toBe("auth middleware verifies bearer tokens");
-  expect(full.anchors).toEqual([{ memory_id: "shared_fresh_new", path: "src/auth.ts", commit_sha: null }]);
-
-  // author's own private record is visible (same rule as the REST detail route)
-  const own = await toolPayload(await callTool(app, "get_memory", { id: "private_fresh" }));
-  expect(own.id).toBe("private_fresh");
+  expect(full.anchors).toEqual([{ memory_id: "mem_middle", path: "src/auth.ts" }]);
 
   const missing = (await (await callTool(app, "get_memory", { id: "nope" })).json()) as any;
   expect(missing.result.isError).toBe(true);
 });
 
-test("get_memories_by_path: fresh by default, stale on request, repo-scoped", async () => {
+test("get_memories_by_path returns every memory anchored to the path", async () => {
   const { app } = seed();
-  const fresh = await toolPayload(
+  const found = await toolPayload(
     await callTool(app, "get_memories_by_path", { repo_fingerprint: FP, path: "src/auth.ts" }),
   );
-  expect(fresh.items.map((i: any) => i.id)).toEqual(["shared_fresh_new"]);
-
-  const withStale = await toolPayload(
-    await callTool(app, "get_memories_by_path", { repo_fingerprint: FP, path: "src/auth.ts", include_stale: true }),
-  );
-  expect(withStale.items.map((i: any) => i.id).sort()).toEqual(["shared_fresh_new", "shared_stale"]);
+  expect(found.items.map((i: any) => i.id).sort()).toEqual(["mem_middle", "mem_newest"]);
 });
 
 test("list_sessions returns the repo timeline", async () => {

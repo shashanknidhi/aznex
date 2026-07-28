@@ -101,13 +101,10 @@ describe('seed → CRUD → FTS5', () => {
       concepts: [],
       files_read: [],
       files_modified: [],
-      confirmed_commit: null,
       ai_extracted: false,
       metadata: {},
     });
     expect(mem.id).toBe('mem_1');
-    expect(mem.freshness_state).toBe('fresh');
-    expect(mem.promotion_state).toBe('private');
 
     // getById round-trip
     const fetched = memories.getById('mem_1');
@@ -117,16 +114,10 @@ describe('seed → CRUD → FTS5', () => {
     const updated = memories.update('mem_1', { title: 'Auth middleware uses RS256' });
     expect(updated?.title).toBe('Auth middleware uses RS256');
 
-    // setPromotion / setFreshness
-    memories.setPromotion('mem_1', 'team_shared');
-    memories.setFreshness('mem_1', 'stale_suspected');
-    const after = memories.getById('mem_1')!;
-    expect(after.promotion_state).toBe('team_shared');
-    expect(after.freshness_state).toBe('stale_suspected');
-
     // ── Memory anchors ────────────────────────────────────────────────────
-    const anchor = anchors.upsert({ memory_id: 'mem_1', path: 'src/auth/middleware.ts', commit_sha: 'abc123' });
-    expect(anchor.commit_sha).toBe('abc123');
+    const anchor = anchors.upsert({ memory_id: 'mem_1', path: 'src/auth/middleware.ts' });
+    expect(anchor.path).toBe('src/auth/middleware.ts');
+    anchors.upsert({ memory_id: 'mem_1', path: 'src/auth/middleware.ts' }); // idempotent
     expect(anchors.listByMemory('mem_1')).toHaveLength(1);
     expect(anchors.listByPath('src/auth/middleware.ts')).toHaveLength(1);
 
@@ -183,7 +174,7 @@ describe('seed → CRUD → FTS5', () => {
       kind: 'observation',
       type: 'raw_observation',
       title: null, content: 'should fail', narrative: null, facts: [], concepts: [],
-      files_read: [], files_modified: [], confirmed_commit: null, ai_extracted: false, metadata: {},
+      files_read: [], files_modified: [], ai_extracted: false, metadata: {},
     })).toThrow(/same repo_fingerprint/);
   });
 

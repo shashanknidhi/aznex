@@ -16,8 +16,6 @@ const base = {
 
 test("valid memory parses with all defaults applied", () => {
   const m = MemorySchema.parse(base);
-  expect(m.promotion_state).toBe("private");
-  expect(m.freshness_state).toBe("fresh");
   expect(m.facts).toEqual([]);
   expect(m.concepts).toEqual([]);
   expect(m.files_read).toEqual([]);
@@ -25,17 +23,10 @@ test("valid memory parses with all defaults applied", () => {
   expect(m.session_id).toBeNull();
   expect(m.title).toBeNull();
   expect(m.narrative).toBeNull();
-  expect(m.confirmed_commit).toBeNull();
 });
 
 test("invalid type enum is rejected", () => {
   expect(() => MemorySchema.parse({ ...base, type: "not_a_type" })).toThrow();
-});
-
-test("invalid promotion_state is rejected", () => {
-  expect(() =>
-    MemorySchema.parse({ ...base, promotion_state: "public" })
-  ).toThrow();
 });
 
 test("ai_extracted is required — missing field throws", () => {

@@ -7,8 +7,6 @@ export interface MemoryItem {
   type: string;
   title: string | null;
   content: string;
-  freshness_state: string;
-  promotion_state: string;
   mine?: boolean;
   author_id: string;
   author_login?: string;
@@ -20,7 +18,7 @@ export interface MemoryDetail extends MemoryItem {
   facts: string[];
   concepts: string[];
   metadata: Record<string, unknown>;
-  anchors: { path: string; commit_sha: string | null }[];
+  anchors: { path: string }[];
 }
 
 export interface RepoInfo {
@@ -64,11 +62,12 @@ export const api = {
     return get<{ items: MemoryItem[]; total: number; page: number }>(`/api/memories?${params}`);
   },
   memory: (id: string) => get<MemoryDetail>(`/api/memories/${encodeURIComponent(id)}`),
-  promote: (id: string) => adminPost<unknown>(`/api/memories/${encodeURIComponent(id)}/promote`, {}),
+  // The only way to withdraw a memory — author or admin.
+  deleteMemory: (id: string) =>
+    adminPost<unknown>(`/api/memories/${encodeURIComponent(id)}`, {}, "DELETE"),
   keys: () =>
     get<{ keys: { id: string; name: string; prefix: string; status: string; created_at_epoch: number; last_used_at_epoch: number | null }[] }>(
       "/api/keys",
     ),
   revokeKey: (id: string) => adminPost<unknown>(`/api/keys/${encodeURIComponent(id)}/revoke`, {}),
-  revoke: (id: string) => adminPost<unknown>(`/api/memories/${encodeURIComponent(id)}/revoke`, {}),
 };

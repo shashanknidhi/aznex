@@ -21,17 +21,6 @@ interface SessionBuffer {
 export interface PipelineDeps {
   runner?: ExtractionRunner;
   ingest?: Partial<IngestClientOptions>;
-  git?: (cwd: string) => Promise<string | null>; // HEAD sha for anchors
-}
-
-async function gitHead(cwd: string): Promise<string | null> {
-  try {
-    const proc = Bun.spawn(["git", "rev-parse", "HEAD"], { cwd, stdout: "pipe", stderr: "ignore" });
-    const [code, out] = await Promise.all([proc.exited, new Response(proc.stdout).text()]);
-    return code === 0 ? out.trim() : null;
-  } catch {
-    return null;
-  }
 }
 
 const ONBOARDED_TTL_MS = 5 * 60_000;
@@ -93,22 +82,28 @@ export function createPipeline(deps: PipelineDeps = {}) {
       deps.runner,
     );
 
-    const commitSha = await (deps.git ?? gitHead)(buffer.cwd);
     const ingestMemories: IngestRequest["memories"] = [];
     for (const m of memories) {
+      // Every free-text field is persisted and searchable, so every one is
+      // scrubbed. content is required; the rest drop out if they scrub to
+      // nothing rather than taking the whole memory down with them.
       const scrubbed = scrubContent(m.content);
       if (scrubbed === null) {
         console.warn(`memory ${m.id}: failed secret scrub — excluded from payload`);
         continue;
       }
-      const anchorPaths = [...new Set([...m.files_modified, ...m.files_read])];
       ingestMemories.push({
         id: m.id,
         type: m.type,
+        title: m.title === null ? null : scrubContent(m.title),
         content: scrubbed,
-        anchors: anchorPaths.map((path) => ({ path, commit_sha: commitSha })),
+        narrative: m.narrative === null ? null : scrubContent(m.narrative),
+        facts: m.facts.map(scrubContent).filter((f): f is string => f !== null),
+        concepts: m.concepts,
+        files_read: m.files_read,
+        files_modified: m.files_modified,
+        metadata: m.metadata,
         ai_extracted: true,
-        confirmed_commit: null,
       });
     }
     if (ingestMemories.length === 0) return;

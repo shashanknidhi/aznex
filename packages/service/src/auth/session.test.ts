@@ -51,10 +51,8 @@ async function seed() {
     id: "mem_1", repo_fingerprint: FP, session_id: null, author_id: seedUser.id,
     agent: "claude-code", kind: "observation", type: "decision",
     title: null, content: "we chose FTS5", narrative: null,
-    facts: [], concepts: [], files_read: [], files_modified: [],
-    confirmed_commit: null, ai_extracted: true, metadata: {},
+    facts: [], concepts: [], files_read: [], files_modified: [], ai_extracted: true, metadata: {},
   });
-  memories.setPromotion("mem_1", "team_shared");
   return { db, app };
 }
 

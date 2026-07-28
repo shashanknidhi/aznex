@@ -125,7 +125,19 @@ const REQUEST = {
   repo_canonical: "acme/api",
   session: { id: "sess_1", agent: "claude-code" as const },
   memories: [
-    { id: "m1", type: "decision" as const, content: "use FTS5", anchors: [], ai_extracted: true },
+    {
+      id: "m1",
+      type: "decision" as const,
+      title: null,
+      content: "use FTS5",
+      narrative: null,
+      facts: [],
+      concepts: [],
+      files_read: [],
+      files_modified: [],
+      metadata: {},
+      ai_extracted: true,
+    },
   ],
 };
 
@@ -184,7 +196,6 @@ test("PostToolUse events buffer; Stop extracts, scrubs, and POSTs a valid Ingest
   const pipeline = createPipeline({
     runner: async () => JSON.stringify([FAKE_RECORD, dirtyRecord]),
     ingest: { serviceUrl: "http://svc", apiKey: "k", fetchImpl: impl, baseDelayMs: 1 },
-    git: async () => "deadbeef",
   });
 
   // cwd = this repo, so computeRepoFingerprint resolves a real remote.
@@ -200,7 +211,14 @@ test("PostToolUse events buffer; Stop extracts, scrubs, and POSTs a valid Ingest
   expect(req.memories.length).toBe(2);
   const dirty = req.memories.find((m) => JSON.stringify(m).includes("[REDACTED]"))!;
   expect(dirty.content).not.toContain("ghp_");
-  expect(req.memories[0]!.anchors[0]).toEqual({ path: "src/auth.ts", commit_sha: "deadbeef" });
+  // The extractor's structured fields reach the wire — the service stores and
+  // indexes all of them, so dropping any here would make them unsearchable.
+  const clean = req.memories[0]!;
+  expect(clean.title).toBe("JWT expiry");
+  expect(clean.facts).toEqual(["JWT tokens expire after 24 hours."]);
+  expect(clean.concepts).toEqual(["auth"]);
+  expect(clean.files_read).toEqual(["src/auth.ts"]);
+  expect(clean.metadata["prompt_version"]).toBe(EXTRACTION_PROMPT_VERSION);
 
   // second Stop for the same session is a no-op (buffer consumed)
   await pipeline({ hook_event_name: "Stop", session_id: "s1" });
@@ -217,7 +235,6 @@ test("session agent comes from the payload stamp; unstamped stays claude-code", 
   const pipeline = createPipeline({
     runner: async () => JSON.stringify([FAKE_RECORD]),
     ingest: { serviceUrl: "http://svc", apiKey: "k", fetchImpl: impl, baseDelayMs: 1 },
-    git: async () => "deadbeef",
   });
 
   const event = (session_id: string, agent?: string) => ({
@@ -301,7 +318,6 @@ test("onboarded repo passes the gate and ingests", async () => {
   const pipeline = createPipeline({
     runner: async () => JSON.stringify([FAKE_RECORD]),
     ingest: { serviceUrl: "http://svc", apiKey: "k", fetchImpl: impl, baseDelayMs: 1 },
-    git: async () => "sha",
   });
   for (const e of EVT("pass-1")) await pipeline(e);
   expect(calls.some((c) => c.includes("/v1/ingest"))).toBe(true);
@@ -319,7 +335,6 @@ test("ingest failure is logged with session+repo and does not throw", async () =
     const pipeline = createPipeline({
       runner: async () => JSON.stringify([FAKE_RECORD]),
       ingest: { serviceUrl: "http://svc", apiKey: "k", fetchImpl: impl, baseDelayMs: 1, maxAttempts: 1 },
-      git: async () => "sha",
     });
     for (const e of EVT("fail-1")) await pipeline(e); // must not throw
     expect(warnings.some((w) => w.includes("fail-1") && w.includes(fp))).toBe(true);

@@ -13,7 +13,6 @@ Coding agents (Claude Code, Codex, opencode, etc.) accumulate valuable knowledge
 - **Captures** durable knowledge from coding-agent sessions automatically via thin hook adapters
 - **Stores** that knowledge centrally, scoped strictly to a single repository
 - **Serves** memories to any MCP-compatible agent via one standard endpoint
-- **Flags staleness** when anchored code has changed since a memory was written
 - **Keeps secrets off the wire** — two-pass scrubbing (client + server) before anything is shared
 
 ## Architecture
@@ -130,7 +129,7 @@ common cases with a fix per finding. Beyond that:
 | Symptom | Fix |
 |---|---|
 | Sessions produce no memories | `tail -50 ~/.aznex/logs/worker.log` — the worker logs every drop reason (most common: repo not onboarded by admin) |
-| Memories are team-visible / private unexpectedly | Deployment default is `AZNEX_DEFAULT_PROMOTION` (pilot: `team_shared`); flip individual memories in the viewer |
+| A memory is wrong or leaked something | Delete it in the viewer (author or admin) — deletion is the only way to withdraw a memory |
 | Uninstall | `aznex-worker uninstall` |
 
 ### For admins (once per team)

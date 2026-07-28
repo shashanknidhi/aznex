@@ -64,7 +64,6 @@ function mem(
     concepts: opts.concepts ?? [],
     files_read: opts.files ?? [],
     files_modified: [],
-    confirmed_commit: null,
     ai_extracted: false,
     metadata: {},
   });

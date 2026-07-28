@@ -254,7 +254,6 @@ export async function extractMemories(
         agent: ctx.agent ?? "claude-code",
         kind: "observation",
         ai_extracted: true,
-        confirmed_commit: null,
         // Provenance: which prompt/model produced this record.
         metadata: { prompt_version: EXTRACTION_PROMPT_VERSION, model: provenanceModel() },
         created_at_epoch: now,

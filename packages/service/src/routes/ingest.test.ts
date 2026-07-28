@@ -62,24 +62,71 @@ const baseReq = (memories: IngestRequest["memories"]): IngestRequest => ({
   memories,
 });
 
+// The wire type is the parsed one, so every field is present here even though
+// the schema defaults them for the caller.
+const mem = (
+  over: Partial<IngestRequest["memories"][number]> & { id: string; content: string },
+): IngestRequest["memories"][number] => ({
+  type: "raw_observation",
+  title: null,
+  narrative: null,
+  facts: [],
+  concepts: [],
+  files_read: [],
+  files_modified: [],
+  metadata: {},
+  ai_extracted: false,
+  ...over,
+});
+
 test("happy path persists session + memory, returns 202", async () => {
   const { db, app } = seed();
   const res = await post(app, baseReq([
-    { id: "mem_1", type: "raw_observation", content: "auth uses RS256", anchors: [{ path: "src/auth.ts", commit_sha: "abc" }], ai_extracted: false },
+    mem({ id: "mem_1", content: "auth uses RS256", files_read: ["src/auth.ts"] }),
   ]));
   expect(res.status).toBe(202);
   expect(await res.json()).toEqual({ accepted: 1, rejected: [] });
   const stored = new MemoryRepository(db).getById("mem_1");
   expect(stored?.content).toBe("auth uses RS256");
-  expect(stored?.promotion_state).toBe("team_shared"); // pilot default: shared on ingest
-  expect(new MemoryAnchorRepository(db).listByMemory("mem_1").length).toBe(1);
+  // Anchors are derived from the file lists, not sent separately.
+  expect(new MemoryAnchorRepository(db).listByMemory("mem_1").map((a) => a.path)).toEqual(["src/auth.ts"]);
+});
+
+test("every extracted field is stored and searchable", async () => {
+  const { db, app } = seed();
+  await post(app, baseReq([
+    mem({
+      id: "mem_rich",
+      title: "Migrations are transactional",
+      content: "The migration runner wraps each step.",
+      narrative: "Traced runMigrations to confirm.",
+      facts: ["runMigrations opens one transaction per version"],
+      concepts: ["how-it-works"],
+      files_read: ["src/db/migrations.ts"],
+      files_modified: ["src/db/schema.ts"],
+      metadata: { prompt_version: "extraction-v1", model: "sonnet" },
+    }),
+  ]));
+  const memories = new MemoryRepository(db);
+  const stored = memories.getById("mem_rich")!;
+  expect(stored.title).toBe("Migrations are transactional");
+  expect(stored.narrative).toBe("Traced runMigrations to confirm.");
+  expect(stored.facts).toEqual(["runMigrations opens one transaction per version"]);
+  expect(stored.concepts).toEqual(["how-it-works"]);
+  expect(stored.files_modified).toEqual(["src/db/schema.ts"]);
+  expect(stored.metadata["model"]).toBe("sonnet");
+  // A word that appears only in facts must be findable — memory_fts indexes
+  // facts, and this is exactly what the old thin wire payload made impossible.
+  expect(memories.search("github.com/acme/widget", "transaction").map((m) => m.id)).toContain("mem_rich");
+  // Both file lists become anchors.
+  expect(new MemoryAnchorRepository(db).listByMemory("mem_rich").length).toBe(2);
 });
 
 test("memory with a secret is rejected individually; clean one accepted", async () => {
   const { db, app } = seed();
   const res = await post(app, baseReq([
-    { id: "clean_1", type: "raw_observation", content: "just some notes", anchors: [], ai_extracted: false },
-    { id: "dirty_1", type: "raw_observation", content: "key is AKIAIOSFODNN7EXAMPLE", anchors: [], ai_extracted: false },
+    mem({ id: "clean_1", content: "just some notes" }),
+    mem({ id: "dirty_1", content: "key is AKIAIOSFODNN7EXAMPLE" }),
   ]));
   const body = (await res.json()) as { accepted: number; rejected: { id: string }[] };
   expect(res.status).toBe(202);
@@ -91,7 +138,7 @@ test("memory with a secret is rejected individually; clean one accepted", async 
 
 test("duplicate session.id + memory.id is idempotent", async () => {
   const { db, app } = seed();
-  const req = baseReq([{ id: "mem_x", type: "raw_observation", content: "note", anchors: [], ai_extracted: false }]);
+  const req = baseReq([mem({ id: "mem_x", content: "note" })]);
   await post(app, req);
   const res2 = await post(app, req);
   expect(res2.status).toBe(202);
@@ -100,17 +147,16 @@ test("duplicate session.id + memory.id is idempotent", async () => {
   expect(new MemoryRepository(db).listBySession("sess_1").length).toBe(1);
 });
 
-test("AZNEX_DEFAULT_PROMOTION=private keeps ingested memories author-private", async () => {
-  process.env["AZNEX_DEFAULT_PROMOTION"] = "private";
-  try {
-    const { db, app } = seed();
-    await post(app, baseReq([
-      { id: "mem_priv_default", type: "raw_observation", content: "review-first note", anchors: [], ai_extracted: false },
-    ]));
-    expect(new MemoryRepository(db).getById("mem_priv_default")?.promotion_state).toBe("private");
-  } finally {
-    delete process.env["AZNEX_DEFAULT_PROMOTION"];
-  }
+test("a secret in narrative or facts is rejected, not just in content", async () => {
+  const { db, app } = seed();
+  const res = await post(app, baseReq([
+    mem({ id: "leak_narr", content: "clean text", narrative: "key is AKIAIOSFODNN7EXAMPLE" }),
+    mem({ id: "leak_fact", content: "clean text", facts: ["token AKIAIOSFODNN7EXAMPLE is in CI"] }),
+  ]));
+  const body = (await res.json()) as { accepted: number; rejected: { id: string }[] };
+  expect(body.accepted).toBe(0);
+  expect(body.rejected.map((r) => r.id).sort()).toEqual(["leak_fact", "leak_narr"]);
+  expect(new MemoryRepository(db).getById("leak_narr")).toBeNull();
 });
 
 test("bad token → 401", async () => {

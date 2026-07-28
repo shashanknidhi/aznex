@@ -109,8 +109,8 @@ Read:  agent --MCP query--> service [auth+verify] --> DB --> agent
 ### Data model (core tables)
 
 - `session` — one per agent session; keyed by `repo_fingerprint`
-- `memory` — atomic knowledge unit; `type` ∈ `{raw_observation, extracted_learning, summary, negative_result, decision}`; `promotion_state` ∈ `{private, pending, team_shared}`; `freshness_state` ∈ `{fresh, stale_suspected}`
-- `memory_anchor` — `(memory_id, path, commit_sha)` — powers the staleness engine
+- `memory` — atomic knowledge unit; `type` ∈ `{raw_observation, extracted_learning, summary, negative_result, decision}`. Visible to every repo member as soon as it is ingested
+- `memory_anchor` — `(memory_id, path)` — powers path-scoped recall (`get_memories_by_path`)
 
 ## Terminology
 
@@ -120,17 +120,16 @@ Read:  agent --MCP query--> service [auth+verify] --> DB --> agent
 | **DAL** | Data Access Layer — the `repositories/` directory as a whole | The layer between business logic and the database |
 | **DAO** | Data Access Object — synonym for Repository; used in issue descriptions | We use "Repository" in code for consistency |
 | **Repo fingerprint** | Canonical git identity: `github.com/owner/name` | Not a local path — must be resolvable by the service for permission checks |
-| **Promotion state** | `private → pending → team_shared` lifecycle of a memory | Only `team_shared` memories are returned to team reads |
-| **Freshness state** | `fresh` or `stale_suspected` — whether anchored code has changed since capture | Set by the staleness engine, not by the worker |
 | **FTS5** | SQLite's built-in full-text search extension | Used for keyword search over `memory.content` and related fields |
 
 ## Key design decisions (non-obvious)
 
 - **DAL must stay engine-agnostic** — SQLite v1, Postgres+pgvector target. Never let SQLite-specific SQL leak into business logic.
-- **Semantic search target: Neo4j (graph + vector) over ChromaDB** — Neo4j's vector index combined with Cypher graph traversal fits Aznex's data model better than a pure vector store. The memory→anchor→file→session→repo graph enables queries like "find stale memories touching files changed near this commit" natively. Evaluate after v1 FTS5 proves insufficient in production.
+- **Semantic search target: Neo4j (graph + vector) over ChromaDB** — Neo4j's vector index combined with Cypher graph traversal fits Aznex's data model better than a pure vector store. The memory→anchor→file→session→repo graph enables queries like "what does the team know about the files this commit touches" natively. Evaluate after v1 FTS5 proves insufficient in production.
 - **Secret scanning is two-pass and mandatory** — client-side (worker, pre-transmission) + server-side (service, at ingestion). Zero leaks is a hard launch gate.
 - **Repo fingerprint ≠ local path** — the fingerprint must resolve to a canonical git-host identity (`host/owner/name`) so server-side permission checks can run. Local paths differ per developer and drift.
-- **`promotion_state` default is deployment-configurable** — `AZNEX_DEFAULT_PROMOTION` (pilot default: `team_shared`, immediate team visibility; `private` for review-before-share). Team reads return only `team_shared`; authors also see their own private/pending records in the viewer and can promote/revoke them.
+- **All memory is shared; deletion is the only withdrawal** — there is no promotion state and no staleness state. Repo access is the only read gate, so every member sees the same context. `DELETE /api/memories/:id` (author or admin) is the safety valve for a memory that is wrong or leaked something.
+- **Ingest stores every extracted field** — `title`, `narrative`, `facts`, `concepts` and both file lists all cross the wire and are indexed by FTS5. Anchors are derived server-side from `files_read ∪ files_modified`.
 - **Hooks must return immediately** — all heavy worker processing (LLM extraction, scrubbing) is async; hooks enqueue and return so the IDE never stalls.
 - **Worker owns the full write pipeline; active session is passive** — the active Claude session fires hooks and nothing else. The background worker handles extraction (spawning the local Claude Code CLI on the user's own subscription), scrubbing, and POSTing to the service. This keeps the active session lean and makes capture automatic with no developer effort.
 - **Service is a dumb store on the write path** — extraction intelligence stays in the worker. The service only validates auth, re-scans for secrets, and persists. No LLM calls server-side.
