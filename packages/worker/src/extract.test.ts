@@ -6,6 +6,7 @@ import {
   buildClaudeArgs,
   buildCodexArgs,
   stripFence,
+  extractionModel,
   resolveExtractionEngine,
   findClaude as findClaudeReal,
   findCodex,
@@ -65,6 +66,53 @@ test("resolveExtractionEngine prefers claude, falls back to codex, throws when n
     .toEqual({ engine: "codex", path: codex });
   expect(() => resolveExtractionEngine(undefined, { claude: missing("claude"), codex: missing("codex") }))
     .toThrow("neither `claude` nor `codex` found");
+});
+
+const tmpConfig = (content: object): string => {
+  const path = join(mkdtempSync(join(tmpdir(), "aznex-cfg-")), "config.json");
+  writeFileSync(path, JSON.stringify(content));
+  return path;
+};
+
+test("extractAgent pins the engine instead of falling back", () => {
+  const missing = (what: string) => () => {
+    throw new Error(`${what} executable not found`);
+  };
+  const claude = fakeBin("claude");
+  const codex = fakeBin("codex");
+  const deps = { claude: () => claude, codex: () => codex };
+
+  // codex pinned wins even though claude resolves fine
+  expect(resolveExtractionEngine(tmpConfig({ extractAgent: "codex" }), deps))
+    .toEqual({ engine: "codex", path: codex });
+  expect(resolveExtractionEngine(tmpConfig({ extractAgent: "claude" }), deps))
+    .toEqual({ engine: "claude", path: claude });
+
+  // a pinned-but-missing engine throws rather than quietly using the other one
+  expect(() =>
+    resolveExtractionEngine(tmpConfig({ extractAgent: "claude" }), { claude: missing("claude"), codex: () => codex }),
+  ).toThrow("claude executable not found");
+  expect(() =>
+    resolveExtractionEngine(tmpConfig({ extractAgent: "codex" }), { claude: () => claude, codex: missing("codex") }),
+  ).toThrow("codex executable not found");
+});
+
+test("a bogus extractAgent degrades to auto-detection", () => {
+  const claude = fakeBin("claude");
+  expect(
+    resolveExtractionEngine(tmpConfig({ extractAgent: "gemini" }), {
+      claude: () => claude,
+      codex: () => fakeBin("codex"),
+    }),
+  ).toEqual({ engine: "claude", path: claude });
+});
+
+test("extractionModel defaults to the engine's cheapest and honours a valid override", () => {
+  expect(extractionModel("claude", tmpConfig({}))).toBe("claude-haiku-4-5");
+  expect(extractionModel("codex", tmpConfig({}))).toBe("gpt-5.6-luna");
+  expect(extractionModel("codex", tmpConfig({ extractModel: "gpt-5.6-sol" }))).toBe("gpt-5.6-sol");
+  // stale model from the other engine — discarded, not passed to the CLI
+  expect(extractionModel("codex", tmpConfig({ extractModel: "claude-opus-5" }))).toBe("gpt-5.6-luna");
 });
 
 test("findCodex: env override wins, and fails loud when it doesn't resolve", () => {

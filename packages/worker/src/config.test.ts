@@ -26,7 +26,8 @@ test("config file supplies values when env is unset", () => {
   const cfg = loadWorkerConfig(path);
   expect(cfg).toEqual({
     serviceUrl: "https://svc", apiKey: "axk_x", workerPort: 4000, claudePath: "/opt/claude", codexPath: null,
-    extractModel: "claude-haiku-4-5", contextEnabled: false, contextMemoryCount: 5, fileContextEnabled: false,
+    extractAgent: "auto", extractModel: "claude-haiku-4-5", contextEnabled: false, contextMemoryCount: 5,
+    fileContextEnabled: false,
   });
 });
 
@@ -48,7 +49,7 @@ test("missing or malformed config file degrades to nulls and defaults", () => {
   const missing = loadWorkerConfig("/nonexistent/config.json");
   expect(missing).toEqual({
     serviceUrl: null, apiKey: null, workerPort: 29639, claudePath: null, codexPath: null,
-    extractModel: null, contextEnabled: true, contextMemoryCount: 10, fileContextEnabled: true,
+    extractAgent: "auto", extractModel: null, contextEnabled: true, contextMemoryCount: 10, fileContextEnabled: true,
   });
   const malformed = loadWorkerConfig(tmpConfig("not json{"));
   expect(malformed.serviceUrl).toBe(null);

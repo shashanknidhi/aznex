@@ -2,7 +2,7 @@ import { join } from "path";
 import { homedir } from "os";
 import { existsSync, readFileSync } from "fs";
 import { CONFIG_PATH, loadWorkerConfig } from "./config.js";
-import { resolveExtractionEngine } from "./extract.js";
+import { extractionModel, resolveExtractionEngine } from "./extract.js";
 import { codexHooksRegistered, codexMcpRegistered } from "./codex-hooks.js";
 import { LOG_FILE, PLIST_PATH, SYSTEMD_UNIT_PATH } from "../daemon/templates.js";
 
@@ -67,15 +67,20 @@ export async function runChecks(deps: DoctorDeps = {}): Promise<CheckResult[]> {
     results.push({ name: "config", status: "ok", detail: config.serviceUrl });
   }
 
-  // 2. extraction engine (claude preferred, codex fallback)
+  // 2. extraction engine + model (configured agent, or claude-then-codex)
   try {
     const { engine, path } = resolveExtractionEngine(configPath);
-    results.push({ name: "extraction engine", status: "ok", detail: `${engine} (${path})` });
+    results.push({
+      name: "extraction engine",
+      status: "ok",
+      detail: `${engine} ${extractionModel(engine, configPath)} (${path})`,
+    });
   } catch {
+    const pinned = config.extractAgent;
     results.push({
       name: "extraction engine",
       status: "fail",
-      detail: "neither claude nor codex found",
+      detail: pinned === "auto" ? "neither claude nor codex found" : `${pinned} pinned but not found`,
       fix: "install Claude Code or Codex, or export CLAUDE_CODE_PATH / CODEX_PATH",
     });
   }

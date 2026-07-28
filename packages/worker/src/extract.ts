@@ -5,6 +5,7 @@ import { execSync } from "child_process";
 import { MemorySchema, type Memory } from "@aznex/shared";
 import type { RawObservation } from "./compress.js";
 import { loadWorkerConfig } from "./config.js";
+import { resolveModel, type Engine } from "./models.js";
 
 // LLM extraction stage (#19). Distills raw_observation records into typed
 // memories via the Claude Agent SDK pattern: spawn the local `claude` binary
@@ -81,14 +82,16 @@ export function findCodex(configPath?: string): string {
 }
 
 export interface ExtractionEngine {
-  engine: "claude" | "codex";
+  engine: Engine;
   path: string;
 }
 
 /**
- * Which local agent CLI runs extraction. Claude Code is preferred — the pinned
- * prompt was validated against it — with Codex as the fallback so a
- * Codex-only machine can still onboard.
+ * Which local agent CLI runs extraction. An `extractAgent` of "claude" or
+ * "codex" pins it — a missing CLI throws rather than silently switching, since
+ * the user asked for that one. Under "auto" (the default), Claude Code is
+ * preferred — the pinned prompt was validated against it — with Codex as the
+ * fallback so a Codex-only machine can still onboard.
  */
 export function resolveExtractionEngine(
   configPath?: string,
@@ -96,6 +99,10 @@ export function resolveExtractionEngine(
   // which agent CLIs happen to be installed on the machine running them
   deps: { claude: typeof findClaude; codex: typeof findCodex } = { claude: findClaude, codex: findCodex },
 ): ExtractionEngine {
+  const pinned = loadWorkerConfig(configPath).extractAgent;
+  if (pinned === "claude") return { engine: "claude", path: deps.claude(configPath) };
+  if (pinned === "codex") return { engine: "codex", path: deps.codex(configPath) };
+
   try {
     return { engine: "claude", path: deps.claude(configPath) };
   } catch (err) {
@@ -153,7 +160,7 @@ export function stripFence(text: string): string {
 
 const claudeRunner = (claudePath: string): ExtractionRunner => async (promptPath, observationsPath) => {
   const proc = Bun.spawn(
-    buildClaudeArgs(claudePath, promptPath, observationsPath, loadWorkerConfig().extractModel),
+    buildClaudeArgs(claudePath, promptPath, observationsPath, extractionModel("claude")),
     { stdout: "pipe", stderr: "pipe" },
   );
   const [stdout, stderr] = await Promise.all([
@@ -174,7 +181,7 @@ const codexRunner = (codexPath: string): ExtractionRunner => async (promptPath, 
     readFileSync(observationsPath, "utf-8"),
     "Extract memory records from the transcript above and reply with ONLY a JSON array.",
   ].join("\n\n");
-  const proc = Bun.spawn(buildCodexArgs(codexPath, tmpdir(), outFile, loadWorkerConfig().extractModel), {
+  const proc = Bun.spawn(buildCodexArgs(codexPath, tmpdir(), outFile, extractionModel("codex")), {
     stdin: new TextEncoder().encode(prompt),
     stdout: "pipe",
     stderr: "pipe",
@@ -189,6 +196,15 @@ const codexRunner = (codexPath: string): ExtractionRunner => async (promptPath, 
   }
 };
 
+/**
+ * The model this engine runs with. Unset config means the engine's cheapest
+ * model, and a model belonging to the *other* engine is discarded — see
+ * resolveModel. Exported for the settings API, which shows the effective value.
+ */
+export function extractionModel(engine: Engine, configPath?: string): string {
+  return resolveModel(engine, loadWorkerConfig(configPath).extractModel);
+}
+
 const defaultRunner: ExtractionRunner = async (promptPath, observationsPath) => {
   const { engine, path } = resolveExtractionEngine();
   const run = engine === "claude" ? claudeRunner(path) : codexRunner(path);
@@ -197,11 +213,12 @@ const defaultRunner: ExtractionRunner = async (promptPath, observationsPath) => 
 
 // Provenance only — an injected test runner means no engine is installed, so
 // this must never throw.
-function engineName(): string {
+function provenanceModel(): string {
   try {
-    return resolveExtractionEngine().engine;
+    const { engine } = resolveExtractionEngine();
+    return extractionModel(engine);
   } catch {
-    return "unknown";
+    return loadWorkerConfig().extractModel ?? "unknown";
   }
 }
 
@@ -239,7 +256,7 @@ export async function extractMemories(
         ai_extracted: true,
         confirmed_commit: null,
         // Provenance: which prompt/model produced this record.
-        metadata: { prompt_version: EXTRACTION_PROMPT_VERSION, model: loadWorkerConfig().extractModel ?? `${engineName()}-default` },
+        metadata: { prompt_version: EXTRACTION_PROMPT_VERSION, model: provenanceModel() },
         created_at_epoch: now,
         updated_at_epoch: now,
       }),

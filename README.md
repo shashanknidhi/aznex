@@ -96,8 +96,9 @@ aznex-worker doctor    # ✓/✗ checks: config, extraction engine, daemon, work
 First success: open a Claude Code or Codex session in an onboarded repo — a
 `# Team memory (aznex)` block appears at session start. End the session and
 your extracted memories show up in the viewer (`<SERVICE_URL>`) within a
-minute. Tune the worker (extraction model, context-injection knobs) at
-http://localhost:29639.
+minute. Tune the worker (coding agent, extraction model, context-injection
+knobs) at http://localhost:29639 — extraction defaults to the cheapest model
+your chosen agent offers.
 
 **Alternative: plugin channel.** Prefer hooks via `/plugin` instead of
 `~/.claude/settings.json`? Install the plugin, then run setup for auth +
