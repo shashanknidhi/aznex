@@ -59,12 +59,16 @@ test("resolveExtractionEngine prefers claude, falls back to codex, throws when n
   };
   const claude = fakeBin("claude");
   const codex = fakeBin("codex");
+  // An explicit empty config, never the default path: resolution reads
+  // extractAgent, so a developer whose own ~/.aznex/config.json pins an engine
+  // would otherwise fail this test.
+  const cfg = tmpConfig({});
 
-  expect(resolveExtractionEngine(undefined, { claude: () => claude, codex: () => codex }))
+  expect(resolveExtractionEngine(cfg, { claude: () => claude, codex: () => codex }))
     .toEqual({ engine: "claude", path: claude });
-  expect(resolveExtractionEngine(undefined, { claude: missing("claude"), codex: () => codex }))
+  expect(resolveExtractionEngine(cfg, { claude: missing("claude"), codex: () => codex }))
     .toEqual({ engine: "codex", path: codex });
-  expect(() => resolveExtractionEngine(undefined, { claude: missing("claude"), codex: missing("codex") }))
+  expect(() => resolveExtractionEngine(cfg, { claude: missing("claude"), codex: missing("codex") }))
     .toThrow("neither `claude` nor `codex` found");
 });
 
@@ -130,7 +134,7 @@ test("findCodex: env override wins, and fails loud when it doesn't resolve", () 
 test("a wrong explicit CLAUDE_CODE_PATH fails loud instead of silently using codex", () => {
   process.env["CLAUDE_CODE_PATH"] = "/nonexistent/claude";
   try {
-    expect(() => resolveExtractionEngine(undefined, { claude: findClaudeReal, codex: () => "/bin/codex" }))
+    expect(() => resolveExtractionEngine(tmpConfig({}), { claude: findClaudeReal, codex: () => "/bin/codex" }))
       .toThrow("CLAUDE_CODE_PATH set but not found");
   } finally {
     delete process.env["CLAUDE_CODE_PATH"];
