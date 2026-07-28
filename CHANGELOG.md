@@ -10,6 +10,42 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning is [SemVer](https://semver.org/spec/v2.0.0.html). Pre-1.0, minor
 bumps stay at `0.1.x` and patch numbers carry both features and fixes.
 
+## [0.1.10] — 2026-07-28
+
+### Added
+
+- **Pick your coding agent and extraction model** (#86) — the worker settings
+  page now has dropdowns for both. Choose Claude Code, Codex, or leave it on
+  auto-detect; pick a model from that agent's list. Picking an agent explicitly
+  fails loudly if its CLI isn't installed, instead of quietly using the other
+  one. Also settable without the page via `AZNEX_EXTRACT_AGENT` and
+  `AZNEX_EXTRACT_MODEL`.
+- **Extraction now defaults to the cheapest model** (#86) — `claude-haiku-4-5`
+  on Claude Code, `gpt-5.6-luna` on Codex, instead of whatever each CLI defaults
+  to. Extraction is a bulk summarise job, so the cheap tier is the right one and
+  the expensive tiers are opt-in. Applies to existing installs with no migration.
+
+### Changed
+
+- `aznex-worker doctor` reports the extraction model alongside the engine, and
+  says "codex pinned but not found" rather than "neither claude nor codex found"
+  when you pinned one that's missing (#86).
+- Memories record the model that actually extracted them, instead of the
+  placeholder `claude-default` (#86).
+- Release notes on GitHub are now taken from this file rather than an
+  auto-generated commit list, and a release without notes fails on purpose (#86).
+
+### Fixed
+
+- **`setup` no longer mints a new API key on every re-run** (#85) — a stored key
+  that still works is reused, so re-running setup doesn't send you through
+  browser auth again. A key the service rejects still falls through to a fresh
+  one.
+- `setup` no longer overwrites the settings you tuned on the worker page —
+  extraction model and context-injection knobs survive a re-run (#85).
+- Codex is accepted as the extraction engine, so a Codex-only machine can
+  onboard without Claude Code installed (#85).
+
 ## [0.1.9] — 2026-07-28
 
 ### Added
@@ -112,6 +148,7 @@ First published release — the Phase 1 MVP, end to end.
   — frontend tests and build, Docker image job, lockfile fix (#46); Railway
   deployment with same-origin SPA and admin onboarding CLI (#43).
 
+[0.1.10]: https://github.com/shashanknidhi/aznex/releases/tag/v0.1.10
 [0.1.9]: https://github.com/shashanknidhi/aznex/releases/tag/v0.1.9
 [0.1.8]: https://github.com/shashanknidhi/aznex/releases/tag/v0.1.8
 [0.1.7]: https://github.com/shashanknidhi/aznex/releases/tag/v0.1.7
