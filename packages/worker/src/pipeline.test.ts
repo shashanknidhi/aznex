@@ -207,6 +207,38 @@ test("PostToolUse events buffer; Stop extracts, scrubs, and POSTs a valid Ingest
   expect(posted.length).toBe(1);
 });
 
+test("session agent comes from the payload stamp; unstamped stays claude-code", async () => {
+  const posted: Record<string, { session: { agent: string } }> = {};
+  const impl = (async (_url: unknown, init: RequestInit) => {
+    const body = JSON.parse(init.body as string) as { session: { id: string; agent: string } };
+    posted[body.session.id] = body;
+    return new Response(JSON.stringify({ accepted: 1, rejected: [] }), { status: 202 });
+  }) as unknown as typeof fetch;
+  const pipeline = createPipeline({
+    runner: async () => JSON.stringify([FAKE_RECORD]),
+    ingest: { serviceUrl: "http://svc", apiKey: "k", fetchImpl: impl, baseDelayMs: 1 },
+    git: async () => "deadbeef",
+  });
+
+  const event = (session_id: string, agent?: string) => ({
+    hook_event_name: "PostToolUse",
+    session_id,
+    cwd: import.meta.dir,
+    tool_name: "Edit",
+    tool_input: { file_path: "src/a.ts" },
+    tool_response: "ok",
+    ...(agent ? { agent } : {}),
+  });
+
+  await pipeline(event("codex_1", "codex"));
+  await pipeline({ hook_event_name: "Stop", session_id: "codex_1" });
+  await pipeline(event("cc_1"));
+  await pipeline({ hook_event_name: "Stop", session_id: "cc_1" });
+
+  expect(posted["codex_1"]!.session.agent).toBe("codex");
+  expect(posted["cc_1"]!.session.agent).toBe("claude-code");
+});
+
 test("session with only noisy events never POSTs", async () => {
   let fetched = false;
   const pipeline = createPipeline({

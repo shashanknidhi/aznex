@@ -44,6 +44,10 @@ export function startWorkerServer(opts?: {
         if (payload === null || typeof payload !== "object") {
           return Response.json({ error: "invalid_json" }, { status: 400 });
         }
+        // ?agent=codex — hook payloads look identical across agents, so the
+        // relay URL is the only place the agent identity survives.
+        const agent = url.searchParams.get("agent");
+        if (agent !== null && payload["agent"] === undefined) payload["agent"] = agent;
         queue.enqueue(payload); // synchronous — response goes out before any processing
         return Response.json({ queued: true });
       }

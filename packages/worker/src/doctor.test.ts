@@ -4,6 +4,7 @@ import { join } from "path";
 import { tmpdir } from "os";
 import { runChecks, printReport, type CheckResult } from "./doctor.js";
 import { parseAgents, buildMcpAddArgs } from "../setup.js";
+import { mergeCodexHooks, appendCodexMcpBlock } from "./codex-hooks.js";
 
 function tmpDir(): string {
   return mkdtempSync(join(tmpdir(), "aznex-doctor-"));
@@ -38,6 +39,7 @@ test("missing config → fail with setup hint; service checks skipped", async ()
     claudeSettingsPath: "/nonexistent/settings.json",
     claudeJsonPath: "/nonexistent/claude.json",
     pluginDirs: ["/nonexistent"],
+    codexHome: "/nonexistent", // isolate from the real ~/.codex
     fetchImpl: (async () => { throw new Error("down"); }) as unknown as typeof fetch,
   });
   const config = get(results, "config");
@@ -52,6 +54,7 @@ test("healthy install → everything ok, exit code 0", async () => {
     claudeSettingsPath: tmpFile("settings.json", { hooks: ALL_HOOKS }),
     claudeJsonPath: tmpFile("claude.json", { mcpServers: { aznex: { url: "https://svc/mcp" } } }),
     pluginDirs: ["/nonexistent"],
+    codexHome: "/nonexistent", // isolate from the real ~/.codex
     fetchImpl: okFetch,
     platform: process.platform,
   });
@@ -66,6 +69,7 @@ test("401 from service → API key fail with re-auth hint", async () => {
     claudeSettingsPath: "/nonexistent",
     claudeJsonPath: "/nonexistent",
     pluginDirs: ["/nonexistent"],
+    codexHome: "/nonexistent", // isolate from the real ~/.codex
     fetchImpl: (async (url: string | URL | Request) =>
       String(url).includes("/api/repos")
         ? new Response("{}", { status: 401 })
@@ -83,6 +87,7 @@ test("partial hooks → warn naming the missing events", async () => {
     claudeSettingsPath: tmpFile("settings.json", { hooks: partial }),
     claudeJsonPath: "/nonexistent",
     pluginDirs: ["/nonexistent"],
+    codexHome: "/nonexistent", // isolate from the real ~/.codex
     fetchImpl: okFetch,
   });
   const hooks = get(results, "hooks");
@@ -98,6 +103,7 @@ test("no settings hooks but plugin installed → hooks ok via plugin", async () 
     claudeSettingsPath: "/nonexistent",
     claudeJsonPath: "/nonexistent",
     pluginDirs: [pluginDir],
+    codexHome: "/nonexistent", // isolate from the real ~/.codex
     fetchImpl: okFetch,
   });
   const hooks = get(results, "hooks");
@@ -114,6 +120,7 @@ test("MCP registered only project-scope → warn suggesting user scope", async (
       projects: { "/some/repo": { mcpServers: { aznex: { url: "https://svc/mcp" } } } },
     }),
     pluginDirs: ["/nonexistent"],
+    codexHome: "/nonexistent", // isolate from the real ~/.codex
     fetchImpl: okFetch,
   });
   const mcp = get(results, "MCP (reads)");
@@ -128,6 +135,7 @@ test("MCP unregistered → warn including the add command", async () => {
     claudeSettingsPath: "/nonexistent",
     claudeJsonPath: "/nonexistent",
     pluginDirs: ["/nonexistent"],
+    codexHome: "/nonexistent", // isolate from the real ~/.codex
     fetchImpl: okFetch,
   });
   const mcp = get(results, "MCP (reads)");
@@ -146,11 +154,38 @@ test("printReport exit code: fail → 1, warn-only → 0", () => {
   }
 });
 
-test("parseAgents: default claude-code, planned agents error as coming soon", () => {
+test("parseAgents: default claude-code, codex supported, planned agents error as coming soon", () => {
   expect(parseAgents(undefined)).toEqual(["claude-code"]);
   expect(parseAgents("claude-code")).toEqual(["claude-code"]);
-  expect(() => parseAgents("codex")).toThrow("coming soon");
+  expect(parseAgents("claude-code,codex")).toEqual(["claude-code", "codex"]);
+  expect(() => parseAgents("cursor")).toThrow("coming soon");
   expect(() => parseAgents("vim")).toThrow("unknown agent");
+});
+
+test("Codex checks: absent home → silent; wired home → ok; unwired → warn", async () => {
+  const base = {
+    configPath: tmpFile("config.json", GOOD_CONFIG),
+    claudeSettingsPath: "/nonexistent",
+    claudeJsonPath: "/nonexistent",
+    pluginDirs: ["/nonexistent"],
+    fetchImpl: okFetch,
+  };
+
+  const absent = await runChecks({ ...base, codexHome: "/nonexistent" });
+  expect(absent.find((r) => r.name.startsWith("Codex"))).toBeUndefined();
+
+  const bare = tmpDir();
+  const unwired = await runChecks({ ...base, codexHome: bare });
+  expect(get(unwired, "Codex hooks").status).toBe("warn");
+  expect(get(unwired, "Codex MCP (reads)").status).toBe("warn");
+
+  const wired = tmpDir();
+  const { config } = mergeCodexHooks({});
+  writeFileSync(join(wired, "hooks.json"), JSON.stringify(config));
+  writeFileSync(join(wired, "config.toml"), appendCodexMcpBlock("", "https://svc", "axk_x")!);
+  const ok = await runChecks({ ...base, codexHome: wired });
+  expect(get(ok, "Codex hooks").status).toBe("ok");
+  expect(get(ok, "Codex MCP (reads)").status).toBe("ok");
 });
 
 test("buildMcpAddArgs produces the user-scope http registration", () => {
