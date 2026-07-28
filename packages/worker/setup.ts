@@ -15,6 +15,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync, chmodSync } from "f
 import { createInterface } from "readline/promises";
 import { CONFIG_PATH, loadWorkerConfig } from "./src/config.js";
 import { mergeClaudeSettings } from "./src/claude-settings.js";
+import { mergeCodexHooks, appendCodexMcpBlock } from "./src/codex-hooks.js";
 import { findClaude } from "./src/extract.js";
 import { browserAuth } from "./src/browser-auth.js";
 import { installDaemon, uninstallDaemon } from "./daemon/install.js";
@@ -22,10 +23,10 @@ import { LOG_FILE } from "./daemon/templates.js";
 
 const CLAUDE_SETTINGS = join(homedir(), ".claude", "settings.json");
 
-// One integration per coding agent; Claude Code is the only one implemented.
-// A future multi-select prompt slots in here without restructuring setup.
-export const SUPPORTED_AGENTS = ["claude-code"] as const;
-const PLANNED_AGENTS = ["codex", "cursor", "gemini-cli"];
+// One integration per coding agent. A future multi-select prompt slots in here
+// without restructuring setup.
+export const SUPPORTED_AGENTS = ["claude-code", "codex"] as const;
+const PLANNED_AGENTS = ["cursor", "gemini-cli"];
 
 export function parseAgents(value: string | undefined): string[] {
   const agents = (value ?? "claude-code").split(",").map((a) => a.trim()).filter(Boolean);
@@ -80,6 +81,9 @@ export async function runSetup(args: string[]): Promise<void> {
   let agents: string[];
   try {
     agents = parseAgents(flag("agents"));
+    // No explicit --agents and Codex is installed → wire it too. Capture is
+    // per-agent, so an unwired Codex silently produces no memories.
+    if (flag("agents") === undefined && Bun.which("codex") !== null) agents.push("codex");
   } catch (err) {
     console.error(`✗ ${err instanceof Error ? err.message : err}`);
     process.exit(1);
@@ -133,27 +137,71 @@ export async function runSetup(args: string[]): Promise<void> {
   const unit = installDaemon();
   console.log(`  ${unit} (logs: ${LOG_FILE})`);
 
+  const followUps: string[] = [];
   for (const agent of agents) {
     if (agent === "claude-code") await integrateClaudeCode(claudePath, serviceUrl, apiKey);
+    if (agent === "codex") followUps.push(...integrateCodex(serviceUrl, apiKey));
   }
 
   await smokeTestWorker();
 
   console.log(`
-✓ setup complete — capture, context injection, and MCP reads are live.
+✓ setup complete for ${agents.join(", ")} — capture, context injection, and MCP reads are live.
 
 First success:
   1. Open a Claude Code session in a repo your admin onboarded — a
      "# Team memory (aznex)" block appears at session start.
   2. Work normally, end the session — your extracted memories show up in the
      viewer (${serviceUrl}) within a minute.
-
+${followUps.length > 0 ? `\nOne manual step left:\n${followUps.map((s) => `  - ${s}`).join("\n")}\n` : ""}
 Tune the worker (extraction model, context injection): http://localhost:${loadWorkerConfig().workerPort}
 Check the install anytime: aznex-worker doctor
 
-Other agents (Codex, …): point their MCP config at ${serviceUrl}/mcp with the
-same Authorization header — capture hooks for them are coming soon.
+Other agents (Cursor, Gemini CLI, …): point their MCP config at ${serviceUrl}/mcp
+with the same Authorization header — capture hooks for them are coming soon.
 `);
+}
+
+/**
+ * Wire Codex capture + reads (#45). Returns follow-up steps the user must do
+ * by hand — Codex refuses to run hooks until they are approved once in the
+ * interactive TUI review, and nothing on the CLI can grant that for them.
+ */
+export function integrateCodex(serviceUrl: string, apiKey: string): string[] {
+  const codexHome = process.env["CODEX_HOME"] ?? join(homedir(), ".codex");
+  const hooksPath = join(codexHome, "hooks.json");
+  const configPath = join(codexHome, "config.toml");
+  const followUps: string[] = [];
+
+  console.log(`→ wiring Codex hooks in ${hooksPath}`);
+  const existing = existsSync(hooksPath)
+    ? (JSON.parse(readFileSync(hooksPath, "utf-8")) as Record<string, unknown>)
+    : {};
+  const { config, added, updated } = mergeCodexHooks(existing);
+  if (added.length > 0 || updated.length > 0) {
+    mkdirSync(codexHome, { recursive: true });
+    writeFileSync(hooksPath, JSON.stringify(config, null, 2) + "\n");
+    if (added.length > 0) console.log(`  added hooks: ${added.join(", ")}`);
+    if (updated.length > 0) console.log(`  updated hooks to this install: ${updated.join(", ")}`);
+    followUps.push(
+      "Codex only runs hooks you have approved: start `codex` once and accept the\n" +
+        "  hook review prompt (aznex relays). Until then Codex sessions capture nothing.",
+    );
+  } else {
+    console.log("  hooks already present — unchanged");
+  }
+
+  console.log("→ registering MCP server (reads)");
+  const toml = existsSync(configPath) ? readFileSync(configPath, "utf-8") : "";
+  const merged = appendCodexMcpBlock(toml, serviceUrl, apiKey);
+  if (merged === null) {
+    console.log("  [mcp_servers.aznex] already present — unchanged");
+  } else {
+    mkdirSync(codexHome, { recursive: true });
+    writeFileSync(configPath, merged);
+    console.log(`  ✓ MCP registered (aznex → ${serviceUrl}/mcp)`);
+  }
+  return followUps;
 }
 
 async function integrateClaudeCode(claudePath: string, serviceUrl: string, apiKey: string): Promise<void> {

@@ -35,6 +35,27 @@ test("POST /hook responds before the payload is processed", async () => {
   }
 });
 
+test("POST /hook?agent=codex stamps the agent; body value wins; no param stays unstamped", async () => {
+  const processed: HookPayload[] = [];
+  const worker = startWorkerServer({ port: 0, process: async (p) => void processed.push(p) });
+  const base = `http://localhost:${worker.server.port}`;
+  try {
+    const post = (path: string, body: object) =>
+      fetch(`${base}${path}`, { method: "POST", body: JSON.stringify(body) });
+    await post("/hook?agent=codex", { session_id: "s1" });
+    await post("/hook?agent=codex", { session_id: "s2", agent: "opencode" });
+    await post("/hook", { session_id: "s3" });
+    await worker.queue.flush();
+    expect(processed).toEqual([
+      { session_id: "s1", agent: "codex" },
+      { session_id: "s2", agent: "opencode" },
+      { session_id: "s3" },
+    ]);
+  } finally {
+    await worker.stop();
+  }
+});
+
 test("queue drains to zero across multiple payloads, in order", async () => {
   const seen: unknown[] = [];
   const queue = new HookQueue(async (p) => {

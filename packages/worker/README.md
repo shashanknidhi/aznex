@@ -105,6 +105,39 @@ the file since it never sees your shell env.
 
 Claude Code pipes the hook event JSON to the script's stdin; the script forwards it to the worker with a 2-second timeout and always exits 0, so a stopped worker never stalls the agent. Set `AZNEX_WORKER_URL` in your shell (or inline in the hook `command`) if the default doesn't fit.
 
+## Codex hook setup
+
+`aznex-worker setup` wires Codex too whenever the `codex` binary is on your
+PATH (or explicitly: `--agents claude-code,codex`). It writes curl relays into
+`~/.codex/hooks.json` and an `[mcp_servers.aznex]` block into
+`~/.codex/config.toml`.
+
+**One manual step:** Codex refuses to run hooks it has not been told to trust.
+Start `codex` once interactively and accept the hook review prompt — until you
+do, Codex sessions capture nothing and `hooks.json` is inert. Nothing on the
+CLI can grant that trust for you (`--dangerously-bypass-hook-trust` exists but
+is per-invocation and, as named, not something setup should do on your behalf).
+
+Codex's hook payloads are contract-compatible with Claude Code's — same
+PascalCase `hook_event_name`, same `cwd`/`session_id`/`tool_name`/`tool_input`/
+`tool_response` fields, same `hookSpecificOutput.additionalContext` reply — so
+the worker endpoints are shared. Two differences the adapter handles:
+
+| | Claude Code | Codex |
+|---|---|---|
+| Config | `~/.claude/settings.json` | `~/.codex/hooks.json` (+ trust approval) |
+| `PostToolUse` matcher | `*` | `.*` (matchers are regexes) |
+| Agent identity | implicit | relay URL carries `?agent=codex` |
+
+Capture is registered for `PostToolUse`, `Stop`, `SessionEnd`, and context
+injection for `SessionStart`. File-anchored injection (`PreToolUse`) is
+Claude-Code-only for now: it keys off `tool_input.file_path`, and Codex reads
+files through the shell instead.
+
+Codex plugins can declare hooks in their manifest, but that channel is dead as
+of Codex 0.144 (`codex features list` → `plugin_hooks  removed`), which is why
+the integration writes `hooks.json` directly.
+
 ## Run as a daemon
 
 ```sh

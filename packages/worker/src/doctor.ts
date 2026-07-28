@@ -3,6 +3,7 @@ import { homedir } from "os";
 import { existsSync, readFileSync } from "fs";
 import { CONFIG_PATH, loadWorkerConfig } from "./config.js";
 import { findClaude } from "./extract.js";
+import { codexHooksRegistered, codexMcpRegistered } from "./codex-hooks.js";
 import { LOG_FILE, PLIST_PATH, SYSTEMD_UNIT_PATH } from "../daemon/templates.js";
 
 // `aznex-worker doctor` — read-only install diagnostics (claude-mem pattern).
@@ -20,6 +21,7 @@ export interface DoctorDeps {
   configPath?: string;
   claudeSettingsPath?: string;
   claudeJsonPath?: string;
+  codexHome?: string;
   pluginDirs?: string[];
   fetchImpl?: typeof fetch;
   platform?: NodeJS.Platform;
@@ -167,6 +169,41 @@ export async function runChecks(deps: DoctorDeps = {}): Promise<CheckResult[]> {
         ? `claude mcp add aznex -s user --transport http ${config.serviceUrl}/mcp --header "Authorization: Bearer <your key>"`
         : "run: npx aznex-worker setup",
     });
+  }
+
+  // 9. Codex integration — skipped entirely when Codex isn't installed, so a
+  // Claude-Code-only machine sees no noise.
+  const codexHome = deps.codexHome ?? process.env["CODEX_HOME"] ?? join(homedir(), ".codex");
+  if (existsSync(codexHome)) {
+    const codexHooks = readJson(join(codexHome, "hooks.json"));
+    if (codexHooks !== null && codexHooksRegistered(codexHooks)) {
+      results.push({
+        name: "Codex hooks",
+        status: "ok",
+        // Trust is per-machine state we can't read; say so rather than imply capture is proven.
+        detail: "registered (approve once in `codex` if Codex sessions capture nothing)",
+      });
+    } else {
+      results.push({
+        name: "Codex hooks",
+        status: "warn",
+        detail: `no aznex relays in ${join(codexHome, "hooks.json")}`,
+        fix: "run: npx aznex-worker setup --agents claude-code,codex",
+      });
+    }
+
+    const codexConfig = join(codexHome, "config.toml");
+    const codexToml = existsSync(codexConfig) ? readFileSync(codexConfig, "utf-8") : "";
+    results.push(
+      codexMcpRegistered(codexToml)
+        ? { name: "Codex MCP (reads)", status: "ok" }
+        : {
+            name: "Codex MCP (reads)",
+            status: "warn",
+            detail: "aznex not in Codex's mcp_servers",
+            fix: "run: npx aznex-worker setup --agents claude-code,codex",
+          },
+    );
   }
 
   return results;

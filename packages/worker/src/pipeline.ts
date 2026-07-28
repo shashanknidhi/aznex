@@ -13,6 +13,7 @@ import { loadWorkerConfig } from "./config.js";
 
 interface SessionBuffer {
   cwd: string;
+  agent: string;
   startedAtEpoch: number;
   observations: RawObservation[];
 }
@@ -118,7 +119,7 @@ export function createPipeline(deps: PipelineDeps = {}) {
       repo_canonical: fingerprint.split("/").slice(1).join("/"),
       session: {
         id: sessionId,
-        agent: "claude-code",
+        agent: buffer.agent,
         started_at_epoch: buffer.startedAtEpoch,
         ended_at_epoch: Date.now(),
       },
@@ -143,6 +144,9 @@ export function createPipeline(deps: PipelineDeps = {}) {
       if (!observation) return;
       const buffer = sessions.get(sessionId) ?? {
         cwd: typeof payload["cwd"] === "string" ? payload["cwd"] : process.cwd(),
+        // Stamped by the hook relay (?agent=…); Claude Code's hooks predate the
+        // param, so an unlabelled session is still claude-code.
+        agent: typeof payload["agent"] === "string" ? payload["agent"] : "claude-code",
         startedAtEpoch: Date.now(),
         observations: [],
       };
