@@ -38,11 +38,6 @@ export const SETTINGS_PAGE = `<!doctype html>
   </label>
   <p class="hint">Passed as <code>--model</code> to that CLI. Defaults to the cheapest model — extraction is a bulk summarise job, so the cheap tier is the right one.</p>
 
-  <label>Worker port
-    <input type="number" name="workerPort" min="1024" max="65535">
-  </label>
-  <p class="hint">Requires a daemon restart. Hooks target 29639 by default — if you change this, export AZNEX_WORKER_URL for your hooks.</p>
-
   <label><input type="checkbox" name="contextEnabled"> Inject team memory at session start</label>
   <label>Memories to inject
     <input type="number" name="contextMemoryCount" min="1" max="50">
@@ -55,7 +50,7 @@ export const SETTINGS_PAGE = `<!doctype html>
 </form>
 <script>
 const form = document.getElementById("form");
-const fields = ["extractAgent", "extractModel", "workerPort", "contextEnabled", "contextMemoryCount", "fileContextEnabled"];
+const fields = ["extractAgent", "extractModel", "contextEnabled", "contextMemoryCount", "fileContextEnabled"];
 let catalog = { claude: [], codex: [] };
 let activeEngine = "claude";
 

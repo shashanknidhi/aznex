@@ -44,13 +44,19 @@ test("null or empty string clears a field back to default; missing file is creat
   const path = tmpConfig(); // no file yet
   // extractAgent pinned so the effective-model assertion doesn't depend on
   // which agent CLIs the test machine happens to have installed.
-  updateSettings({ extractAgent: "claude", extractModel: "claude-opus-5", workerPort: 4000 }, path);
-  updateSettings({ extractModel: null, workerPort: "" }, path);
+  updateSettings({ extractAgent: "claude", extractModel: "claude-opus-5", contextMemoryCount: 5 }, path);
+  updateSettings({ extractModel: null, contextMemoryCount: "" }, path);
   expect(JSON.parse(readFileSync(path, "utf-8"))).toEqual({ extractAgent: "claude" });
   const out = getSettings(path) as { effective: Record<string, unknown> };
   // cleared extractModel resolves to the active engine's cheapest, not null
   expect(out.effective["extractModel"]).toBe("claude-haiku-4-5");
-  expect(out.effective["workerPort"]).toBe(29639);
+  expect(out.effective["contextMemoryCount"]).toBe(10);
+});
+
+test("workerPort is not editable from the page — it needs a daemon restart", () => {
+  const path = tmpConfig({ workerPort: 29639 });
+  updateSettings({ workerPort: 4000 }, path);
+  expect(JSON.parse(readFileSync(path, "utf-8"))["workerPort"]).toBe(29639);
 });
 
 test("getSettings serves the model catalog and the resolved engine", () => {

@@ -8,10 +8,12 @@ import { MODELS, isKnownModel, resolveModel, type Engine } from "./models.js";
 // writable — serviceUrl/apiKey/claudePath belong to `aznex-worker setup` and
 // the API never returns the apiKey at all.
 
+// workerPort is deliberately absent: changing it needs a daemon restart *and*
+// a matching AZNEX_WORKER_URL for every hook script, so the page was an easy
+// way to silently break capture. Set AZNEX_WORKER_PORT instead.
 const EDITABLE = [
   "extractAgent",
   "extractModel",
-  "workerPort",
   "contextEnabled",
   "contextMemoryCount",
   "fileContextEnabled",
@@ -21,7 +23,6 @@ type EditableKey = (typeof EDITABLE)[number];
 const ENV_FOR: Partial<Record<EditableKey, string>> = {
   extractAgent: "AZNEX_EXTRACT_AGENT",
   extractModel: "AZNEX_EXTRACT_MODEL",
-  workerPort: "AZNEX_WORKER_PORT",
 };
 
 function withoutSecrets(config: WorkerConfig): Omit<WorkerConfig, "apiKey"> {
