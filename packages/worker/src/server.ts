@@ -3,7 +3,7 @@ import { processHookPayload } from "./pipeline.js";
 import { loadWorkerConfig } from "./config.js";
 import { createContextHandlers, type ContextDeps } from "./context.js";
 import { CONFIG_PATH } from "./config.js";
-import { getSettings, updateSettings } from "./settings.js";
+import { getSettings, updateSettings, InvalidSettingError } from "./settings.js";
 import { SETTINGS_PAGE } from "./settings-page.js";
 
 export interface WorkerServer {
@@ -71,7 +71,14 @@ export function startWorkerServer(opts?: {
         if (body === null || typeof body !== "object") {
           return Response.json({ error: "invalid_json" }, { status: 400 });
         }
-        return Response.json(updateSettings(body, configPath));
+        try {
+          return Response.json(updateSettings(body, configPath));
+        } catch (err) {
+          if (err instanceof InvalidSettingError) {
+            return Response.json({ error: "invalid_setting", detail: err.message }, { status: 400 });
+          }
+          throw err;
+        }
       }
       return Response.json({ error: "not_found" }, { status: 404 });
     },

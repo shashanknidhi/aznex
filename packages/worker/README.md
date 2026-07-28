@@ -79,6 +79,8 @@ the file since it never sees your shell env.
 | `AZNEX_WORKER_URL` | `http://localhost:29639` | Where hook scripts send events |
 | `AZNEX_SERVICE_URL` | from config file | Remote service to POST memories to |
 | `AZNEX_API_KEY` | from config file | Bearer key for `/v1/ingest` |
+| `AZNEX_EXTRACT_AGENT` | `auto` | Which CLI runs extraction: `auto` (Claude Code, else Codex), `claude`, or `codex`. An explicit value fails loud if that CLI is missing. |
+| `AZNEX_EXTRACT_MODEL` | cheapest for the agent | Model passed as `--model`. Must be one the settings page lists for the active agent — `claude-haiku-4-5` for Claude Code, `gpt-5.6-luna` for Codex. |
 
 ## Claude Code hook setup
 

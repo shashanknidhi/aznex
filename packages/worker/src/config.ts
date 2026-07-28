@@ -8,12 +8,17 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync, chmodSync } from "f
 
 export const CONFIG_PATH = join(homedir(), ".aznex", "config.json");
 
+// "auto" = prefer Claude Code, fall back to Codex (the historical behaviour).
+// An explicit engine pins it and fails loud if that CLI isn't installed.
+export type ExtractAgent = "auto" | "claude" | "codex";
+
 export interface WorkerConfig {
   serviceUrl: string | null;
   apiKey: string | null;
   workerPort: number;
   claudePath: string | null;
   codexPath: string | null;
+  extractAgent: ExtractAgent;
   extractModel: string | null;
   contextEnabled: boolean;
   contextMemoryCount: number;
@@ -26,10 +31,19 @@ export interface ConfigFile {
   workerPort?: number;
   claudePath?: string;
   codexPath?: string;
+  extractAgent?: ExtractAgent;
   extractModel?: string;
   contextEnabled?: boolean;
   contextMemoryCount?: number;
   fileContextEnabled?: boolean;
+}
+
+const EXTRACT_AGENTS: readonly ExtractAgent[] = ["auto", "claude", "codex"];
+
+// A typo in the env var or a hand-edited config shouldn't silently pin an
+// engine that doesn't exist — fall back to auto-detection instead.
+function parseExtractAgent(value: unknown): ExtractAgent | null {
+  return EXTRACT_AGENTS.includes(value as ExtractAgent) ? (value as ExtractAgent) : null;
 }
 
 /**
@@ -68,6 +82,10 @@ export function loadWorkerConfig(configPath = CONFIG_PATH): WorkerConfig {
     workerPort: Number(process.env["AZNEX_WORKER_PORT"] ?? file.workerPort ?? 29639),
     claudePath: process.env["CLAUDE_CODE_PATH"] ?? file.claudePath ?? null,
     codexPath: process.env["CODEX_PATH"] ?? file.codexPath ?? null,
+    extractAgent:
+      parseExtractAgent(process.env["AZNEX_EXTRACT_AGENT"]) ?? parseExtractAgent(file.extractAgent) ?? "auto",
+    // null = "use the engine's cheapest model"; resolved at spawn time in
+    // extract.ts, because which model is cheapest depends on the engine.
     extractModel: process.env["AZNEX_EXTRACT_MODEL"] ?? file.extractModel ?? null,
     // Context-injection knobs are file-only (set via the settings page) —
     // no env vars until someone actually needs them.

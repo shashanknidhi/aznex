@@ -13,7 +13,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write # create the GitHub release
   id-token: write # OIDC token for npm trusted publishing
 
 jobs:
@@ -65,3 +65,18 @@ jobs:
             (cd packages/$pkg && bun pm pack --destination /tmp/release)
             npm publish "/tmp/release/$(echo "$NAME" | tr -d '@' | tr '/' '-')-$VERSION.tgz" --provenance --access public
           done
+
+      # Release notes come from the CHANGELOG section for this version — no
+      # auto-generated commit dump. Missing section = failed release, on purpose.
+      - name: Create GitHub release from CHANGELOG
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          awk -v v="## [${TAG#v}]" 'index($0, v) == 1 {f=1; next} f && /^## \[/ {exit} f' CHANGELOG.md > /tmp/notes.md
+          if [ ! -s /tmp/notes.md ]; then
+            echo "::error::no CHANGELOG.md section for ${TAG#v} — add one before tagging"
+            exit 1
+          fi
+          gh release create "$TAG" --title "$TAG" --notes-file /tmp/notes.md --verify-tag

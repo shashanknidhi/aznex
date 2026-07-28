@@ -17,7 +17,7 @@ import { createInterface } from "readline/promises";
 import { CONFIG_PATH, loadWorkerConfig, writeWorkerConfig } from "./src/config.js";
 import { mergeClaudeSettings } from "./src/claude-settings.js";
 import { mergeCodexHooks, appendCodexMcpBlock } from "./src/codex-hooks.js";
-import { findClaude, resolveExtractionEngine } from "./src/extract.js";
+import { extractionModel, findClaude, resolveExtractionEngine } from "./src/extract.js";
 import { browserAuth } from "./src/browser-auth.js";
 import { installDaemon, uninstallDaemon } from "./daemon/install.js";
 import { LOG_FILE } from "./daemon/templates.js";
@@ -171,7 +171,7 @@ export async function runSetup(args: string[]): Promise<void> {
     console.error("✗ no supported coding agent found on PATH. Install Claude Code or Codex, or pass --agents.");
     process.exit(1);
   }
-  console.log(`→ extraction engine: ${engine.engine} (${engine.path})`);
+  console.log(`→ extraction engine: ${engine.engine} ${extractionModel(engine.engine)} (${engine.path})`);
 
   const serviceUrl = (flag("service-url") ?? (await ask("Aznex service URL: "))).replace(/\/+$/, "");
   if (!serviceUrl) {
@@ -226,7 +226,7 @@ First success:
   2. Work normally, end the session — your extracted memories show up in the
      viewer (${serviceUrl}) within a minute.
 ${followUps.length > 0 ? `\nOne manual step left:\n${followUps.map((s) => `  - ${s}`).join("\n")}\n` : ""}
-Tune the worker (extraction model, context injection): http://localhost:${loadWorkerConfig().workerPort}
+Tune the worker (coding agent, extraction model, context injection): http://localhost:${loadWorkerConfig().workerPort}
 Check the install anytime: aznex-worker doctor
 
 Other agents (Cursor, Gemini CLI, …): point their MCP config at ${serviceUrl}/mcp

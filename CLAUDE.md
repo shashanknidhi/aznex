@@ -61,6 +61,33 @@ import { test, expect } from "bun:test";
 
 Every non-trivial function (a branch, a parser, a data transformation, anything on a security/money path) needs at least one test that fails if the logic breaks. Trivial one-liners don't need tests.
 
+## Releasing
+
+`@aznex/shared` and `@aznex/worker` share one version and are published to npm
+by `.github/workflows/release.yml` on any `v*` tag push. Service and frontend
+auto-deploy to Railway on every push to `main` — they are not versioned.
+
+**Every release needs a `CHANGELOG.md` section.** The workflow extracts the
+section for the tag and uses it as the GitHub release body; a missing section
+fails the release. Do not let a tag ship without notes.
+
+Release steps:
+
+1. Add a `## [X.Y.Z] — YYYY-MM-DD` section at the top of `CHANGELOG.md`, with
+   `### Added` / `### Changed` / `### Fixed` / `### Removed` subsections as
+   needed. One bullet per user-visible change, in plain language — what changed
+   and why it matters, not the commit subject. Cite the PR number: `(#83)`.
+   Add the `[X.Y.Z]: https://github.com/shashanknidhi/aznex/releases/tag/vX.Y.Z`
+   link at the bottom.
+2. Bump `version` in `packages/shared/package.json` and
+   `packages/worker/package.json` to the same `X.Y.Z` (the workflow refuses to
+   publish if either disagrees with the tag).
+3. Open a `chore: release vX.Y.Z` PR and merge it once CI is green.
+4. Tag `main` and push: `git tag vX.Y.Z && git push origin vX.Y.Z`.
+5. The workflow typechecks, tests, publishes both packages to npm via OIDC
+   trusted publishing, then creates the GitHub release from the CHANGELOG
+   section.
+
 ## Architecture
 
 Two trust zones: **developer machine** (untrusted clients) and **remote server** (trusted tier).
