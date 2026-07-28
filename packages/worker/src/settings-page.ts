@@ -27,7 +27,7 @@ export const SETTINGS_PAGE = `<!doctype html>
   <label>Extraction model
     <input type="text" name="extractModel" placeholder="CLI default (blank)">
   </label>
-  <p class="hint">Passed as <code>--model</code> to the local claude CLI, e.g. <code>claude-haiku-4-5</code>. Blank = the CLI's own default.</p>
+  <p class="hint">Passed as <code>--model</code> to the local extraction CLI (claude, or codex when Claude Code isn't installed), e.g. <code>claude-haiku-4-5</code>. Blank = the CLI's own default.</p>
 
   <label>Worker port
     <input type="number" name="workerPort" min="1024" max="65535">
@@ -40,6 +40,7 @@ export const SETTINGS_PAGE = `<!doctype html>
   </label>
 
   <label><input type="checkbox" name="fileContextEnabled"> Inject file-anchored memories on Read</label>
+  <p class="hint">Claude Code only — Codex reads files through the shell, so there's no file path to key off.</p>
 
   <button type="submit">Save</button><span id="status"></span>
 </form>

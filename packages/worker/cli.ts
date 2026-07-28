@@ -41,8 +41,9 @@ switch (cmd) {
     console.log(`aznex-worker — Aznex local capture worker
 
 usage:
-  aznex-worker setup --service-url <url> [--api-key] [--agents claude-code]
+  aznex-worker setup --service-url <url> [--api-key] [--new-key] [--agents claude-code,codex]
                                                               install everything (config + daemon + hooks + MCP)
+                                                              reuses a valid stored key; --new-key forces a fresh one
   aznex-worker doctor                                         check the install (read-only, exit 1 on failure)
   aznex-worker mcp                                            stdio→HTTP MCP proxy (used by the Claude Code plugin)
   aznex-worker serve                                          run the worker in the foreground

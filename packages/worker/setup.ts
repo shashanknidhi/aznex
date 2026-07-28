@@ -1,22 +1,23 @@
 #!/usr/bin/env bun
 // aznex-worker setup — one-command developer install.
 //
-//   aznex-worker setup --service-url https://aznex.up.railway.app [--api-key] [--agents claude-code]
+//   aznex-worker setup --service-url https://aznex.up.railway.app [--api-key] [--new-key] [--agents claude-code,codex]
 //   aznex-worker setup --uninstall
 //
-// Everything in one shot: validates the service URL + API key against the
-// live service, writes ~/.aznex/config.json (0600 — the daemon can't see
-// shell env), installs the login daemon, wires the per-agent integration
-// (Claude Code: capture hooks + MCP registration), and smoke-tests the
+// Everything in one shot: reuses or mints an API key, validates it and the
+// service URL against the live service, writes ~/.aznex/config.json (0600 —
+// the daemon can't see shell env), installs the login daemon, wires the
+// per-agent integration (Claude Code: settings.json hooks + `claude mcp add`;
+// Codex: hooks.json relays + config.toml MCP block), and smoke-tests the
 // worker. `curl <SERVICE_URL>/install.sh | bash` wraps this.
 import { dirname, join } from "path";
 import { homedir } from "os";
-import { existsSync, mkdirSync, readFileSync, writeFileSync, chmodSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { createInterface } from "readline/promises";
-import { CONFIG_PATH, loadWorkerConfig } from "./src/config.js";
+import { CONFIG_PATH, loadWorkerConfig, writeWorkerConfig } from "./src/config.js";
 import { mergeClaudeSettings } from "./src/claude-settings.js";
 import { mergeCodexHooks, appendCodexMcpBlock } from "./src/codex-hooks.js";
-import { findClaude } from "./src/extract.js";
+import { findClaude, resolveExtractionEngine } from "./src/extract.js";
 import { browserAuth } from "./src/browser-auth.js";
 import { installDaemon, uninstallDaemon } from "./daemon/install.js";
 import { LOG_FILE } from "./daemon/templates.js";
@@ -39,6 +40,18 @@ export function parseAgents(value: string | undefined): string[] {
   return agents;
 }
 
+/**
+ * No --agents flag: wire every supported agent actually installed. Capture is
+ * per-agent, so an unwired agent silently produces no memories — and wiring
+ * one that isn't installed leaves dead hooks behind.
+ */
+export function detectAgents(installed = (bin: string) => Bun.which(bin) !== null): string[] {
+  const agents: string[] = [];
+  if (installed("claude")) agents.push("claude-code");
+  if (installed("codex")) agents.push("codex");
+  return agents;
+}
+
 export function buildMcpAddArgs(claudePath: string, serviceUrl: string, apiKey: string): string[] {
   return [
     claudePath, "mcp", "add", "aznex",
@@ -56,14 +69,72 @@ async function ask(question: string): Promise<string> {
   return answer;
 }
 
-async function validate(serviceUrl: string, apiKey: string): Promise<void> {
+/**
+ * Checks a key against the live service. "rejected" (401) is a *result*, not an
+ * error, so a stale stored key can fall through to a fresh browser login —
+ * while an unreachable service still fails loudly instead of silently minting.
+ */
+export type KeyVerdict = "ok" | "rejected";
+export type Validator = (serviceUrl: string, apiKey: string) => Promise<KeyVerdict>;
+
+const validate: Validator = async (serviceUrl, apiKey) => {
   const health = await fetch(`${serviceUrl}/health`).catch(() => null);
   if (!health?.ok) throw new Error(`service unreachable: ${serviceUrl}/health`);
   const authed = await fetch(`${serviceUrl}/api/repos`, {
     headers: { Authorization: `Bearer ${apiKey}` },
   });
-  if (authed.status === 401) throw new Error("API key rejected (401) — re-run setup to authorize this device again");
+  if (authed.status === 401) return "rejected";
   if (!authed.ok) throw new Error(`API key check failed: ${authed.status}`);
+  return "ok";
+};
+
+export interface KeyResolution {
+  apiKey: string;
+  source: "flag" | "stored" | "minted";
+}
+
+/**
+ * One place decides which API key setup uses, so re-running setup stops
+ * minting a throwaway key every time:
+ *
+ *   --api-key            → that key (headless/CI); rejected is a hard error
+ *   --new-key            → skip reuse, mint a fresh one (rotation)
+ *   stored + same URL    → reuse when it still authenticates
+ *   otherwise / rejected → browser login mints one
+ */
+export async function resolveApiKey(
+  opts: {
+    flagKey?: string | undefined;
+    newKey: boolean;
+    serviceUrl: string;
+    stored: { apiKey: string | null; serviceUrl: string | null };
+  },
+  deps: { validate: Validator; mint: (serviceUrl: string) => Promise<string> },
+): Promise<KeyResolution> {
+  const { serviceUrl } = opts;
+
+  if (opts.flagKey) {
+    if ((await deps.validate(serviceUrl, opts.flagKey)) === "rejected") {
+      throw new Error("API key rejected (401) — check the key you passed");
+    }
+    return { apiKey: opts.flagKey, source: "flag" };
+  }
+
+  // A key is scoped to the service that minted it; a different URL means a
+  // different key namespace, so never reuse across URLs.
+  const storedUrl = opts.stored.serviceUrl?.replace(/\/+$/, "") ?? null;
+  if (!opts.newKey && opts.stored.apiKey && storedUrl === serviceUrl) {
+    if ((await deps.validate(serviceUrl, opts.stored.apiKey)) === "ok") {
+      return { apiKey: opts.stored.apiKey, source: "stored" };
+    }
+    console.log("! stored API key was rejected — authorizing this device again");
+  }
+
+  const minted = await deps.mint(serviceUrl);
+  if ((await deps.validate(serviceUrl, minted)) === "rejected") {
+    throw new Error("freshly minted API key was rejected — report this");
+  }
+  return { apiKey: minted, source: "minted" };
 }
 
 export async function runSetup(args: string[]): Promise<void> {
@@ -74,31 +145,33 @@ export async function runSetup(args: string[]): Promise<void> {
 
   if (args.includes("--uninstall")) {
     console.log(`daemon removed: ${uninstallDaemon()}`);
-    console.log(`(kept ${CONFIG_PATH} and Claude hooks — delete manually if wanted)`);
+    console.log(`(kept ${CONFIG_PATH} and the Claude Code / Codex hooks — delete manually if wanted)`);
     return;
   }
 
   let agents: string[];
   try {
-    agents = parseAgents(flag("agents"));
-    // No explicit --agents and Codex is installed → wire it too. Capture is
-    // per-agent, so an unwired Codex silently produces no memories.
-    if (flag("agents") === undefined && Bun.which("codex") !== null) agents.push("codex");
+    agents = flag("agents") === undefined ? detectAgents() : parseAgents(flag("agents"));
   } catch (err) {
     console.error(`✗ ${err instanceof Error ? err.message : err}`);
     process.exit(1);
   }
 
-  // Extraction spawns the local `claude` binary — resolve it NOW, in the
-  // user's shell where PATH works, and persist it: the daemon runs under
+  // Extraction spawns a local agent CLI — resolve it NOW, in the user's shell
+  // where PATH works, and persist the path: the daemon runs under
   // launchd/systemd with a minimal PATH and would never find it.
-  let claudePath: string;
+  let engine: { engine: "claude" | "codex"; path: string };
   try {
-    claudePath = findClaude();
-  } catch {
-    console.error("✗ `claude` executable not found. Install Claude Code first (or set CLAUDE_CODE_PATH).");
+    engine = resolveExtractionEngine();
+  } catch (err) {
+    console.error(`✗ ${err instanceof Error ? err.message : err}`);
     process.exit(1);
   }
+  if (agents.length === 0) {
+    console.error("✗ no supported coding agent found on PATH. Install Claude Code or Codex, or pass --agents.");
+    process.exit(1);
+  }
+  console.log(`→ extraction engine: ${engine.engine} (${engine.path})`);
 
   const serviceUrl = (flag("service-url") ?? (await ask("Aznex service URL: "))).replace(/\/+$/, "");
   if (!serviceUrl) {
@@ -106,32 +179,31 @@ export async function runSetup(args: string[]): Promise<void> {
     process.exit(1);
   }
 
-  // Default: browser login (GitHub OAuth on the Aznex web app) mints the key.
-  // The api-key flag is the headless/CI fallback.
-  let apiKey = flag("api-key");
-  if (!apiKey) {
-    try {
-      apiKey = await browserAuth(serviceUrl);
-      console.log("✓ device authorized");
-    } catch (err) {
-      console.error(`✗ ${err instanceof Error ? err.message : err}`);
-      console.error("  (headless machine? re-run and pass your key via the api-key flag)");
-      process.exit(1);
-    }
-  }
-
+  // Reuse a still-valid stored key; otherwise browser login (GitHub OAuth on
+  // the Aznex web app) mints one. The api-key flag is the headless/CI path.
+  const stored = loadWorkerConfig();
+  let apiKey: string;
   console.log("→ validating against the service…");
   try {
-    await validate(serviceUrl, apiKey);
+    const resolved = await resolveApiKey(
+      { flagKey: flag("api-key"), newKey: args.includes("--new-key"), serviceUrl, stored },
+      { validate, mint: browserAuth },
+    );
+    apiKey = resolved.apiKey;
+    if (resolved.source === "stored") console.log(`✓ reusing stored API key (${apiKey.slice(0, 12)}…)`);
+    if (resolved.source === "minted") console.log("✓ device authorized");
   } catch (err) {
     console.error(`✗ ${err instanceof Error ? err.message : err}`);
+    console.error("  (headless machine? re-run and pass your key via the api-key flag)");
     process.exit(1);
   }
 
   console.log(`→ writing ${CONFIG_PATH}`);
-  mkdirSync(dirname(CONFIG_PATH), { recursive: true });
-  writeFileSync(CONFIG_PATH, JSON.stringify({ serviceUrl, apiKey, claudePath }, null, 2) + "\n");
-  chmodSync(CONFIG_PATH, 0o600);
+  writeWorkerConfig({
+    serviceUrl,
+    apiKey,
+    ...(engine.engine === "claude" ? { claudePath: engine.path } : { codexPath: engine.path }),
+  });
 
   console.log("→ installing worker daemon");
   const unit = installDaemon();
@@ -139,7 +211,7 @@ export async function runSetup(args: string[]): Promise<void> {
 
   const followUps: string[] = [];
   for (const agent of agents) {
-    if (agent === "claude-code") await integrateClaudeCode(claudePath, serviceUrl, apiKey);
+    if (agent === "claude-code") await integrateClaudeCode(claudePathOrNull(engine), serviceUrl, apiKey);
     if (agent === "codex") followUps.push(...integrateCodex(serviceUrl, apiKey));
   }
 
@@ -149,7 +221,7 @@ export async function runSetup(args: string[]): Promise<void> {
 ✓ setup complete for ${agents.join(", ")} — capture, context injection, and MCP reads are live.
 
 First success:
-  1. Open a Claude Code session in a repo your admin onboarded — a
+  1. Open a ${agentLabel(agents)} session in a repo your admin onboarded — a
      "# Team memory (aznex)" block appears at session start.
   2. Work normally, end the session — your extracted memories show up in the
      viewer (${serviceUrl}) within a minute.
@@ -160,6 +232,24 @@ Check the install anytime: aznex-worker doctor
 Other agents (Cursor, Gemini CLI, …): point their MCP config at ${serviceUrl}/mcp
 with the same Authorization header — capture hooks for them are coming soon.
 `);
+}
+
+const AGENT_LABELS: Record<string, string> = { "claude-code": "Claude Code", codex: "Codex" };
+
+export function agentLabel(agents: string[]): string {
+  return agents.map((a) => AGENT_LABELS[a] ?? a).join(" or ");
+}
+
+// `claude mcp add` needs the binary. It's the resolved engine when Claude Code
+// is what runs extraction; otherwise the user asked for claude-code wiring
+// explicitly, so look again and let null mean "hooks only, no MCP".
+function claudePathOrNull(engine: { engine: string; path: string }): string | null {
+  if (engine.engine === "claude") return engine.path;
+  try {
+    return findClaude();
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -204,7 +294,7 @@ export function integrateCodex(serviceUrl: string, apiKey: string): string[] {
   return followUps;
 }
 
-async function integrateClaudeCode(claudePath: string, serviceUrl: string, apiKey: string): Promise<void> {
+async function integrateClaudeCode(claudePath: string | null, serviceUrl: string, apiKey: string): Promise<void> {
   const { aznexPluginInstalled } = await import("./src/doctor.js");
   if (aznexPluginInstalled()) {
     // Plugin machines get hooks + MCP from the plugin bundle — wiring them
@@ -229,6 +319,12 @@ async function integrateClaudeCode(claudePath: string, serviceUrl: string, apiKe
     if (updated.length > 0) console.log(`  updated hooks to this install: ${updated.join(", ")}`);
   } else {
     console.log("  hooks already present — unchanged");
+  }
+
+  if (claudePath === null) {
+    console.warn("  ! `claude` not found — skipping MCP registration (hooks are wired)");
+    console.warn(`  register manually:\n    claude mcp add aznex -s user --transport http ${serviceUrl}/mcp --header "Authorization: Bearer <your key>"`);
+    return;
   }
 
   console.log("→ registering MCP server (reads)");

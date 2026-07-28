@@ -89,7 +89,7 @@ export function createPipeline(deps: PipelineDeps = {}) {
 
     const memories = await extractMemories(
       buffer.observations,
-      { repoFingerprint: fingerprint, sessionId },
+      { repoFingerprint: fingerprint, sessionId, agent: buffer.agent },
       deps.runner,
     );
 

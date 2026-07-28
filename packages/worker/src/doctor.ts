@@ -2,7 +2,7 @@ import { join } from "path";
 import { homedir } from "os";
 import { existsSync, readFileSync } from "fs";
 import { CONFIG_PATH, loadWorkerConfig } from "./config.js";
-import { findClaude } from "./extract.js";
+import { resolveExtractionEngine } from "./extract.js";
 import { codexHooksRegistered, codexMcpRegistered } from "./codex-hooks.js";
 import { LOG_FILE, PLIST_PATH, SYSTEMD_UNIT_PATH } from "../daemon/templates.js";
 
@@ -67,15 +67,16 @@ export async function runChecks(deps: DoctorDeps = {}): Promise<CheckResult[]> {
     results.push({ name: "config", status: "ok", detail: config.serviceUrl });
   }
 
-  // 2. claude CLI
+  // 2. extraction engine (claude preferred, codex fallback)
   try {
-    results.push({ name: "claude CLI", status: "ok", detail: findClaude(configPath) });
+    const { engine, path } = resolveExtractionEngine(configPath);
+    results.push({ name: "extraction engine", status: "ok", detail: `${engine} (${path})` });
   } catch {
     results.push({
-      name: "claude CLI",
+      name: "extraction engine",
       status: "fail",
-      detail: "claude executable not found",
-      fix: "install Claude Code, or export CLAUDE_CODE_PATH=/path/to/claude",
+      detail: "neither claude nor codex found",
+      fix: "install Claude Code or Codex, or export CLAUDE_CODE_PATH / CODEX_PATH",
     });
   }
 
@@ -133,14 +134,14 @@ export async function runChecks(deps: DoctorDeps = {}): Promise<CheckResult[]> {
     hooks[e]?.some((entry) => entry.hooks?.some((h) => h.command?.includes("claude-code-hook.ts"))),
   );
   if (registered.length === HOOK_EVENTS.length) {
-    results.push({ name: "hooks", status: "ok", detail: "all events registered" });
+    results.push({ name: "Claude Code hooks", status: "ok", detail: "all events registered" });
   } else if (aznexPluginInstalled(deps.pluginDirs)) {
-    results.push({ name: "hooks", status: "ok", detail: "via aznex plugin" });
+    results.push({ name: "Claude Code hooks", status: "ok", detail: "via aznex plugin" });
   } else if (registered.length > 0) {
     const missing = HOOK_EVENTS.filter((e) => !registered.includes(e));
-    results.push({ name: "hooks", status: "warn", detail: `missing: ${missing.join(", ")}`, fix: "re-run setup to add the new hook events" });
+    results.push({ name: "Claude Code hooks", status: "warn", detail: `missing: ${missing.join(", ")}`, fix: "re-run setup to add the new hook events" });
   } else {
-    results.push({ name: "hooks", status: "fail", detail: "no aznex hooks in settings.json", fix: "run: npx aznex-worker setup (or install the aznex plugin)" });
+    results.push({ name: "Claude Code hooks", status: "fail", detail: "no aznex hooks in settings.json", fix: "run: npx aznex-worker setup (or install the aznex plugin)" });
   }
 
   // 8. MCP registered (warn-only — reads still work via other agents)
@@ -149,20 +150,20 @@ export async function runChecks(deps: DoctorDeps = {}): Promise<CheckResult[]> {
   const projects = (claudeJson?.["projects"] ?? {}) as Record<string, { mcpServers?: Record<string, unknown> }>;
   const projectScoped = Object.keys(projects).filter((p) => projects[p]?.mcpServers?.["aznex"]);
   if (mcpServers["aznex"]) {
-    results.push({ name: "MCP (reads)", status: "ok" });
+    results.push({ name: "Claude Code MCP (reads)", status: "ok" });
   } else if (aznexPluginInstalled(deps.pluginDirs)) {
-    results.push({ name: "MCP (reads)", status: "ok", detail: "via aznex plugin (stdio proxy)" });
+    results.push({ name: "Claude Code MCP (reads)", status: "ok", detail: "via aznex plugin (stdio proxy)" });
   } else if (projectScoped.length > 0) {
     // pre-v0.1.4 setups registered project-scope; memory then only reaches those repos
     results.push({
-      name: "MCP (reads)",
+      name: "Claude Code MCP (reads)",
       status: "warn",
       detail: `registered only for ${projectScoped.length} project(s), not user-wide`,
       fix: `claude mcp remove aznex; then: claude mcp add aznex -s user --transport http ${config.serviceUrl}/mcp --header "Authorization: Bearer <your key>"`,
     });
   } else {
     results.push({
-      name: "MCP (reads)",
+      name: "Claude Code MCP (reads)",
       status: "warn",
       detail: "aznex not in Claude Code's user-scope MCP servers",
       fix: config.serviceUrl

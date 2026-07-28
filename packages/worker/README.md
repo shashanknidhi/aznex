@@ -25,11 +25,14 @@ aznex-worker setup --service-url https://<your-app>.up.railway.app
 
 Headless/CI machines can skip the browser flow by passing their key via the `--api-key` flag.
 
-Prereq either way: Claude Code. Setup validates the URL + key
-against the live service, writes `~/.aznex/config.json` (0600 — the daemon
-reads this, since launchd/systemd don't see your shell env), installs the
-login daemon, wires the Claude Code capture hooks globally in
-`~/.claude/settings.json`, and prints the MCP command for reads.
+Prereq either way: Claude Code **or** Codex — extraction spawns whichever CLI
+is installed (claude preferred). Setup reuses the API key already in
+`~/.aznex/config.json` when it still authenticates (`--new-key` forces a fresh
+one), validates the URL + key against the live service, writes
+`~/.aznex/config.json` (0600 — the daemon reads this, since launchd/systemd
+don't see your shell env), installs the login daemon, wires the capture hooks
+for every supported agent on your PATH (`~/.claude/settings.json` and/or
+`~/.codex/hooks.json`), and registers the MCP server for reads.
 `aznex-worker uninstall` removes the daemon.
 
 ## Publishing (maintainers)
