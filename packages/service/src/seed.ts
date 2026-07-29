@@ -86,21 +86,14 @@ const mem = memories.create({
   concepts: ['JWT', 'asymmetric keys', 'JWKS'],
   files_read: ['src/auth/middleware.ts'],
   files_modified: [],
-  confirmed_commit: null,
   ai_extracted: false,
   metadata: {},
 });
-console.log('Memory:', mem.id, 'promotion=', mem.promotion_state, 'freshness=', mem.freshness_state);
+console.log('Memory:', mem.id, mem.type);
 
 // ── Memory anchor ─────────────────────────────────────────────────────────
-const anchor = anchors.upsert({ memory_id: mem.id, path: 'src/auth/middleware.ts', commit_sha: 'abc123def456' });
-console.log('Anchor:', anchor.path, anchor.commit_sha);
-
-// ── Promote + stale ───────────────────────────────────────────────────────
-memories.setPromotion(mem.id, 'team_shared');
-memories.setFreshness(mem.id, 'stale_suspected');
-const updated = memories.getById(mem.id)!;
-console.log('After promote/stale:', updated.promotion_state, updated.freshness_state);
+const anchor = anchors.upsert({ memory_id: mem.id, path: 'src/auth/middleware.ts' });
+console.log('Anchor:', anchor.path);
 
 // ── FTS5 search ───────────────────────────────────────────────────────────
 const results = memories.search(repo.fingerprint, 'JWT RS256');

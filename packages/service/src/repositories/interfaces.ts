@@ -8,9 +8,7 @@ import type {
   Memory, CreateMemory,
   MemoryAnchor,
   AgentEvent, CreateAgentEvent,
-  FreshnessState, PromotionState,
 } from '@aznex/shared';
-import type { MemoryFilter } from './memory.js';
 
 export interface IUserRepository {
   create(input: CreateUser): User;
@@ -63,13 +61,12 @@ export interface IMemoryRepository {
   create(input: CreateMemory): Memory;
   getById(id: string): Memory | null;
   update(id: string, input: Partial<CreateMemory>): Memory | null;
-  listByRepo(repoFingerprint: string, limit?: number, filter?: MemoryFilter, offset?: number): Memory[];
-  countByRepo(repoFingerprint: string, filter?: MemoryFilter): number;
+  listByRepo(repoFingerprint: string, limit?: number, offset?: number): Memory[];
+  countByRepo(repoFingerprint: string): number;
   listBySession(sessionId: string): Memory[];
-  search(repoFingerprint: string, query: string, limit?: number, filter?: MemoryFilter, offset?: number): Memory[];
-  countSearch(repoFingerprint: string, query: string, filter?: MemoryFilter): number;
-  setFreshness(id: string, state: FreshnessState): void;
-  setPromotion(id: string, state: PromotionState): void;
+  search(repoFingerprint: string, query: string, limit?: number, offset?: number): Memory[];
+  countSearch(repoFingerprint: string, query: string): number;
+  delete(id: string): boolean;
 }
 
 export interface IMemoryAnchorRepository {

@@ -16,7 +16,6 @@ export function injectStubs(raw: unknown): unknown {
     agent: "claude-code",
     kind: "observation",
     ai_extracted: true,
-    confirmed_commit: null,
     created_at_epoch: now,
     updated_at_epoch: now,
   };

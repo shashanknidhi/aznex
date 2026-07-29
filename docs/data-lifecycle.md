@@ -2,55 +2,26 @@
 
 State machines for every entity that has a lifecycle in Aznex. Immutable entities (e.g. `AgentEvent`, `MemoryAnchor`) are not listed — they are written once and never mutated.
 
-> **Implementation status:** the states and enums below match the code exactly. A few *transitions* are executed by components that are still planned rather than built: GitHub webhook handling (repo `active ↔ inactive`), the repo-member sync job, the session reaper, and the staleness engine that sets `stale_suspected`. Everything else is live.
+`Memory` itself has no lifecycle: it is shared with the whole repo the moment it lands, and the only transition is deletion. See below.
+
+> **Implementation status:** the states and enums below match the code exactly. A few *transitions* are executed by components that are still planned rather than built: GitHub webhook handling (repo `active ↔ inactive`), the repo-member sync job, and the session reaper. Everything else is live.
 
 ---
 
-## Memory — `promotion_state`
+## Memory — no lifecycle
 
-Controls visibility. Captured memory starts private to its author and must be explicitly promoted before the team can see it.
+A memory has no visibility or freshness state. It is created by ingestion, readable by everyone with access to its repo from that moment, and deleted or not.
 
 ```mermaid
 stateDiagram-v2
-    [*] --> private : memory captured (default)
-
-    private --> pending : author promotes\n(or future: code merged to main branch)
-    pending --> team_shared : admin / maintainer approves
-    pending --> private : rejected
-
-    team_shared --> private : revoked\n(memory found incorrect or misleading)
+    [*] --> stored : POST /v1/ingest (secret-scanned)
+    stored --> [*] : DELETE /api/memories/:id\n(author or admin)
 ```
-
-| State | Who can read | Writable by |
-|---|---|---|
-| `private` | Author only | Author |
-| `pending` | Author + admins | Author, admin |
-| `team_shared` | All repo members (via MCP) | Admin only |
 
 **Notes:**
-- Only `team_shared` memories are returned by `search_memory` and `get_recent_context` MCP calls.
-- The merge-to-main auto-promotion path (future, Phase 2) promotes to `pending`, not directly to `team_shared` — a human still approves.
-- Revoking (`team_shared → private`) is a safety valve for when a memory is discovered to be wrong or contain sensitive content that slipped past the secret scanner.
-
----
-
-## Memory — `freshness_state`
-
-Tracks whether the code a memory refers to has changed since the memory was captured.
-
-```mermaid
-stateDiagram-v2
-    [*] --> fresh : memory written (default)
-
-    fresh --> stale_suspected : reconciliation job detects\nanchored path changed since commit_sha
-
-    stale_suspected --> fresh : author re-confirms memory\nagainst current commit
-    stale_suspected --> [*] : memory deleted
-```
-
-**Trigger:** the reconciliation job runs when a push arrives on the repo's default branch (via GitHub webhook, Phase 2) or on a scheduled poll. It compares each `memory_anchor.commit_sha` against the current HEAD commit for that path.
-
-**At read time:** `stale_suspected` memories are flagged in results and excluded by default (`include_stale: false`). Agents and the frontend should surface the flag rather than silently drop the memory.
+- Repo access is the only read gate. `search_memory`, `get_recent_context`, `get_memories_by_path` and the viewer all return everything captured against the repo, whoever captured it — one shared context per repo is the product.
+- Deletion is the safety valve for a memory that is wrong, misleading, or leaked something past the two secret scanners. It is a hard delete: anchors cascade and the FTS row is dropped by trigger.
+- Promotion (`private → pending → team_shared`) and freshness (`fresh / stale_suspected`) were removed. Promotion was a no-op in every deployment and the staleness engine was never built; both could only hide memory from the team.
 
 ---
 

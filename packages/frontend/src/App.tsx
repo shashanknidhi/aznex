@@ -238,7 +238,7 @@ function ApiKeys() {
             <span>
               <code>{k.prefix}…</code> <span className="muted">{k.name} · created {formatDate(k.created_at_epoch)} ·{" "}
               {k.last_used_at_epoch ? `last used ${formatDate(k.last_used_at_epoch)}` : "never used"}</span>{" "}
-              {k.status === "revoked" && <span className="badge stale">revoked</span>}
+              {k.status === "revoked" && <span className="badge revoked">revoked</span>}
             </span>
             {k.status === "active" && (
               <button className="danger small" onClick={() => void api.revokeKey(k.id).then(load)}>
@@ -254,17 +254,12 @@ function ApiKeys() {
 
 // ── memory viewer (#23) ───────────────────────────────────────────────────────
 
-function badgeClass(state: string): string {
-  return state === "stale_suspected" ? "badge stale" : "badge";
-}
-
 function MemoryList() {
   const { fingerprint = "" } = useParams();
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
   const [debounced, setDebounced] = useState("");
   const [typeFilter, setTypeFilter] = useState<string | null>(null);
-  const [freshFilter, setFreshFilter] = useState<string | null>(null);
   const [items, setItems] = useState<MemoryItem[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -286,7 +281,7 @@ function MemoryList() {
     void refresh();
   }, [fingerprint, debounced, page]);
 
-  const visible = filterMemories(items, { type: typeFilter, freshness: freshFilter });
+  const visible = filterMemories(items, { type: typeFilter });
 
   return (
     <div>
@@ -308,46 +303,30 @@ function MemoryList() {
             <option key={t} value={t}>{t}</option>
           ))}
         </select>
-        <select value={freshFilter ?? ""} onChange={(e) => setFreshFilter(e.target.value || null)}>
-          <option value="">any freshness</option>
-          <option value="fresh">fresh</option>
-          <option value="stale_suspected">stale suspected</option>
-        </select>
       </div>
       <p className="muted">{total} memories</p>
       <ul className="list">
         {visible.map((m) => (
           <li
             key={m.id}
-            className={m.freshness_state === "stale_suspected" ? "card stale-card" : "card"}
+            className="card"
             onClick={() => navigate(`/memory/${encodeURIComponent(m.id)}`)}
           >
             <span className="badge type">{m.type}</span>{" "}
-            <span className={badgeClass(m.freshness_state)}>{m.freshness_state}</span>{" "}
-            {m.promotion_state !== "team_shared" && <span className="badge private">{m.promotion_state}</span>}
             <p>{m.title ? <strong>{m.title} — </strong> : null}{preview(m.content)}</p>
             <p className="muted">
               {m.author_login ?? m.author_id} · {formatDate(m.created_at_epoch)}
-              {m.mine && m.promotion_state === "private" && (
-                <button
-                  className="small"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    void api.promote(m.id).then(refresh);
-                  }}
-                >
-                  share with team
-                </button>
-              )}
-              {m.mine && m.promotion_state === "team_shared" && (
+              {m.mine && (
                 <button
                   className="danger small"
                   onClick={(e) => {
                     e.stopPropagation();
-                    void api.revoke(m.id).then(refresh);
+                    // Deleting is the only way to withdraw a memory, so confirm.
+                    if (!confirm("Delete this memory for everyone on the team?")) return;
+                    void api.deleteMemory(m.id).then(refresh);
                   }}
                 >
-                  make private
+                  delete
                 </button>
               )}
             </p>
@@ -377,8 +356,7 @@ function MemoryView() {
   return (
     <div>
       <p><Link to="/">← repos</Link></p>
-      <span className="badge type">{memory.type}</span>{" "}
-      <span className={badgeClass(memory.freshness_state)}>{memory.freshness_state}</span>
+      <span className="badge type">{memory.type}</span>
       {memory.title && <h2>{memory.title}</h2>}
       <p>{memory.content}</p>
       {memory.narrative && <p className="muted">{memory.narrative}</p>}
@@ -395,7 +373,6 @@ function MemoryView() {
             {memory.anchors.map((a) => (
               <li key={a.path}>
                 <code>{a.path}</code>
-                {a.commit_sha && <span className="muted"> @ {a.commit_sha.slice(0, 8)}</span>}
               </li>
             ))}
           </ul>

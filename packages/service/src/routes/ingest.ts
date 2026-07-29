@@ -50,7 +50,8 @@ export function registerIngestRoutes(app: Hono<AppEnv>): void {
     let accepted = 0;
 
     for (const m of req.memories) {
-      const scan = scanSecrets(m.content);
+      // Every text field is persisted, so every text field is scanned.
+      const scan = scanSecrets(memoryText(m));
       if (!scan.clean) {
         const types = [...new Set(scan.violations.map((v) => v.type))].join(", ");
         rejected.push({ id: m.id, reason: `secret detected: ${types}` });
@@ -60,13 +61,10 @@ export function registerIngestRoutes(app: Hono<AppEnv>): void {
       const alreadyStored = Boolean(memories.getById(m.id));
       if (!alreadyStored) {
         memories.create(toCreateMemory(m, req, user.id));
-        // Deployment-configurable default (team_shared for the pilot);
-        // create() itself always starts rows private per the schema.
-        if (loadConfig().defaultPromotion === "team_shared") {
-          memories.setPromotion(m.id, "team_shared");
-        }
-        for (const a of m.anchors) {
-          anchors.upsert({ memory_id: m.id, path: a.path, commit_sha: a.commit_sha ?? null });
+        // Anchors are the files this memory is about — derived here so the wire
+        // payload carries each path once.
+        for (const path of new Set([...m.files_modified, ...m.files_read])) {
+          anchors.upsert({ memory_id: m.id, path });
         }
       }
       accepted++;
@@ -76,8 +74,8 @@ export function registerIngestRoutes(app: Hono<AppEnv>): void {
   });
 }
 
-// The wire payload (IngestMemory) is thin; the memory table is rich. Fill the
-// non-extracted fields with defaults — the worker only sends the essentials.
+// Every field the extractor produced, since every one of them is searchable:
+// memory_fts indexes content, title, narrative, facts and concepts.
 function toCreateMemory(
   m: IngestMemory,
   req: { repo_fingerprint: string; session: { id: string; agent: string } },
@@ -91,15 +89,21 @@ function toCreateMemory(
     agent: req.session.agent,
     kind: m.type === "summary" ? ("summary" as const) : ("observation" as const),
     type: m.type,
-    title: null,
+    title: m.title,
     content: m.content,
-    narrative: null,
-    facts: [],
-    concepts: [],
-    files_read: [],
-    files_modified: [],
-    confirmed_commit: m.confirmed_commit ?? null,
+    narrative: m.narrative,
+    facts: m.facts,
+    concepts: m.concepts,
+    files_read: m.files_read,
+    files_modified: m.files_modified,
     ai_extracted: m.ai_extracted,
-    metadata: {},
+    metadata: m.metadata, // provenance: extraction prompt version + model
   };
+}
+
+/** Every free-text field that reaches the database, for the secret scan. */
+function memoryText(m: IngestMemory): string {
+  return [m.title, m.content, m.narrative, ...m.facts, ...m.concepts]
+    .filter((s): s is string => typeof s === "string")
+    .join("\n");
 }

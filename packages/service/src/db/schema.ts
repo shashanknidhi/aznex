@@ -97,9 +97,6 @@ export function ensureSchema(db: Database): void {
       concepts TEXT NOT NULL DEFAULT '[]',
       files_read TEXT NOT NULL DEFAULT '[]',
       files_modified TEXT NOT NULL DEFAULT '[]',
-      freshness_state TEXT NOT NULL DEFAULT 'fresh' CHECK(freshness_state IN ('fresh', 'stale_suspected')),
-      promotion_state TEXT NOT NULL DEFAULT 'private' CHECK(promotion_state IN ('private', 'pending', 'team_shared')),
-      confirmed_commit TEXT,
       ai_extracted INTEGER NOT NULL CHECK(ai_extracted IN (0, 1)),
       metadata TEXT NOT NULL DEFAULT '{}',
       created_at_epoch INTEGER NOT NULL,
@@ -111,7 +108,6 @@ export function ensureSchema(db: Database): void {
     CREATE TABLE IF NOT EXISTS memory_anchor (
       memory_id TEXT NOT NULL,
       path TEXT NOT NULL,
-      commit_sha TEXT,
       PRIMARY KEY (memory_id, path),
       FOREIGN KEY(memory_id) REFERENCES memory(id) ON DELETE CASCADE
     );
@@ -138,8 +134,6 @@ export function ensureSchema(db: Database): void {
   db.run('CREATE INDEX IF NOT EXISTS idx_memory_repo_time ON memory(repo_fingerprint, created_at_epoch DESC)');
   db.run('CREATE INDEX IF NOT EXISTS idx_memory_session ON memory(session_id)');
   db.run('CREATE INDEX IF NOT EXISTS idx_memory_author ON memory(author_id)');
-  db.run('CREATE INDEX IF NOT EXISTS idx_memory_promotion ON memory(promotion_state)');
-  db.run('CREATE INDEX IF NOT EXISTS idx_memory_freshness ON memory(freshness_state)');
   db.run('CREATE INDEX IF NOT EXISTS idx_memory_type ON memory(kind, type)');
 
   db.run('CREATE INDEX IF NOT EXISTS idx_memory_anchor_path ON memory_anchor(path)');

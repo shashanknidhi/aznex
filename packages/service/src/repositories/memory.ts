@@ -1,7 +1,7 @@
 import { Database } from 'bun:sqlite';
 import {
   MemorySchema, CreateMemorySchema,
-  type Memory, type CreateMemory, type FreshnessState, type PromotionState,
+  type Memory, type CreateMemory,
 } from '@aznex/shared';
 import { ensureSchema } from '../db/schema.js';
 import { parseJsonArray, parseJsonObject, stringifyJson } from '../db/serde.js';
@@ -22,9 +22,6 @@ interface MemoryRow {
   concepts: string;
   files_read: string;
   files_modified: string;
-  freshness_state: string;
-  promotion_state: string;
-  confirmed_commit: string | null;
   ai_extracted: number;
   metadata: string;
   created_at_epoch: number;
@@ -47,40 +44,11 @@ function mapRow(row: MemoryRow): Memory {
     concepts: parseJsonArray(row.concepts),
     files_read: parseJsonArray(row.files_read),
     files_modified: parseJsonArray(row.files_modified),
-    freshness_state: row.freshness_state,
-    promotion_state: row.promotion_state,
-    confirmed_commit: row.confirmed_commit,
     ai_extracted: row.ai_extracted === 1,
     metadata: parseJsonObject(row.metadata),
     created_at_epoch: row.created_at_epoch,
     updated_at_epoch: row.updated_at_epoch,
   });
-}
-
-// Optional visibility filter applied by read paths (MCP, frontend API).
-export interface MemoryFilter {
-  promotionState?: PromotionState;
-  freshnessState?: FreshnessState;
-  /** team_shared plus this user's own memories (any promotion state). */
-  visibleTo?: string;
-}
-
-function filterClause(filter?: MemoryFilter): [sql: string, params: string[]] {
-  let sql = "";
-  const params: string[] = [];
-  if (filter?.promotionState) {
-    sql += " AND memory.promotion_state = ?";
-    params.push(filter.promotionState);
-  }
-  if (filter?.visibleTo) {
-    sql += " AND (memory.promotion_state = 'team_shared' OR memory.author_id = ?)";
-    params.push(filter.visibleTo);
-  }
-  if (filter?.freshnessState) {
-    sql += " AND memory.freshness_state = ?";
-    params.push(filter.freshnessState);
-  }
-  return [sql, params];
 }
 
 function buildFtsQuery(query: string): string {
@@ -107,17 +75,15 @@ export class MemoryRepository implements IMemoryRepository {
       INSERT INTO memory (
         id, repo_fingerprint, session_id, author_id, agent, kind, type, title, content,
         narrative, facts, concepts, files_read, files_modified,
-        freshness_state, promotion_state, confirmed_commit, ai_extracted,
-        metadata, created_at_epoch, updated_at_epoch
+        ai_extracted, metadata, created_at_epoch, updated_at_epoch
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'fresh', 'private', ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id, data.repo_fingerprint, data.session_id ?? null, data.author_id, data.agent,
       data.kind, data.type, data.title ?? null, data.content,
       data.narrative ?? null,
       stringifyJson(data.facts), stringifyJson(data.concepts),
       stringifyJson(data.files_read), stringifyJson(data.files_modified),
-      data.confirmed_commit ?? null,
       data.ai_extracted ? 1 : 0,
       stringifyJson(data.metadata), now, now,
     );
@@ -134,13 +100,11 @@ export class MemoryRepository implements IMemoryRepository {
     if (!existing) return null;
     const now = Date.now();
     const next = CreateMemorySchema.parse({ ...existing, ...input });
-    // freshness_state and promotion_state are intentionally excluded from this UPDATE —
-    // they are managed exclusively via setFreshness() and setPromotion().
     this.db.prepare(`
       UPDATE memory SET
         repo_fingerprint = ?, session_id = ?, author_id = ?, agent = ?, kind = ?, type = ?,
         title = ?, content = ?, narrative = ?, facts = ?, concepts = ?,
-        files_read = ?, files_modified = ?, confirmed_commit = ?, ai_extracted = ?,
+        files_read = ?, files_modified = ?, ai_extracted = ?,
         metadata = ?, updated_at_epoch = ?
       WHERE id = ?
     `).run(
@@ -148,25 +112,23 @@ export class MemoryRepository implements IMemoryRepository {
       next.title ?? null, next.content, next.narrative ?? null,
       stringifyJson(next.facts), stringifyJson(next.concepts),
       stringifyJson(next.files_read), stringifyJson(next.files_modified),
-      next.confirmed_commit ?? null, next.ai_extracted ? 1 : 0,
+      next.ai_extracted ? 1 : 0,
       stringifyJson(next.metadata), now, id,
     );
     return this.getById(id);
   }
 
-  listByRepo(repoFingerprint: string, limit = 100, filter?: MemoryFilter, offset = 0): Memory[] {
-    const [cond, params] = filterClause(filter);
+  listByRepo(repoFingerprint: string, limit = 100, offset = 0): Memory[] {
     const rows = this.db.prepare(
-      `SELECT * FROM memory WHERE repo_fingerprint = ?${cond} ORDER BY created_at_epoch DESC LIMIT ? OFFSET ?`
-    ).all(repoFingerprint, ...params, limit, offset) as MemoryRow[];
+      'SELECT * FROM memory WHERE repo_fingerprint = ? ORDER BY created_at_epoch DESC LIMIT ? OFFSET ?'
+    ).all(repoFingerprint, limit, offset) as MemoryRow[];
     return rows.map(mapRow);
   }
 
-  countByRepo(repoFingerprint: string, filter?: MemoryFilter): number {
-    const [cond, params] = filterClause(filter);
+  countByRepo(repoFingerprint: string): number {
     const row = this.db.prepare(
-      `SELECT COUNT(*) AS n FROM memory WHERE repo_fingerprint = ?${cond}`
-    ).get(repoFingerprint, ...params) as { n: number };
+      'SELECT COUNT(*) AS n FROM memory WHERE repo_fingerprint = ?'
+    ).get(repoFingerprint) as { n: number };
     return row.n;
   }
 
@@ -177,41 +139,36 @@ export class MemoryRepository implements IMemoryRepository {
     return rows.map(mapRow);
   }
 
-  search(repoFingerprint: string, query: string, limit = 20, filter?: MemoryFilter, offset = 0): Memory[] {
+  search(repoFingerprint: string, query: string, limit = 20, offset = 0): Memory[] {
     const ftsQuery = buildFtsQuery(query);
     if (!ftsQuery) return [];
-    const [cond, params] = filterClause(filter);
     const rows = this.db.prepare(`
       SELECT memory.*
       FROM memory
       JOIN memory_fts ON memory_fts.memory_id = memory.id
       WHERE memory_fts.repo_fingerprint = ?
-        AND memory_fts MATCH ?${cond}
+        AND memory_fts MATCH ?
       ORDER BY bm25(memory_fts)
       LIMIT ? OFFSET ?
-    `).all(repoFingerprint, ftsQuery, ...params, limit, offset) as MemoryRow[];
+    `).all(repoFingerprint, ftsQuery, limit, offset) as MemoryRow[];
     return rows.map(mapRow);
   }
 
-  countSearch(repoFingerprint: string, query: string, filter?: MemoryFilter): number {
+  countSearch(repoFingerprint: string, query: string): number {
     const ftsQuery = buildFtsQuery(query);
     if (!ftsQuery) return 0;
-    const [cond, params] = filterClause(filter);
     const row = this.db.prepare(`
       SELECT COUNT(*) AS n
       FROM memory
       JOIN memory_fts ON memory_fts.memory_id = memory.id
       WHERE memory_fts.repo_fingerprint = ?
-        AND memory_fts MATCH ?${cond}
-    `).get(repoFingerprint, ftsQuery, ...params) as { n: number };
+        AND memory_fts MATCH ?
+    `).get(repoFingerprint, ftsQuery) as { n: number };
     return row.n;
   }
 
-  setFreshness(id: string, state: FreshnessState): void {
-    this.db.prepare('UPDATE memory SET freshness_state = ?, updated_at_epoch = ? WHERE id = ?').run(state, Date.now(), id);
-  }
-
-  setPromotion(id: string, state: PromotionState): void {
-    this.db.prepare('UPDATE memory SET promotion_state = ?, updated_at_epoch = ? WHERE id = ?').run(state, Date.now(), id);
+  delete(id: string): boolean {
+    // Anchors cascade via FK; the FTS delete trigger clears the index row.
+    return this.db.prepare('DELETE FROM memory WHERE id = ?').run(id).changes > 0;
   }
 }

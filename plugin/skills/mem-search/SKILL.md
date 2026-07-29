@@ -39,9 +39,9 @@ Strip protocol/`git@`/`.git` and normalize to `host/owner/name`.
    full narrative and anchors.
 2. For file-scoped questions, `get_memories_by_path` with the repo-relative
    path.
-3. Results are team-shared and freshness-filtered by default; pass
-   `include_stale: true` when investigating history (stale = the anchored code
-   changed since capture, so verify against current code before relying on it).
+3. Every memory captured against the repo is returned — there is no visibility
+   filter. Memories describe the code as it was at capture time, so verify
+   against current code before relying on one.
 4. Cite what you use: mention the memory's type and content when it shapes
    your answer, so the user knows it came from team memory rather than the
    current code.

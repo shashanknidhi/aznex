@@ -10,6 +10,44 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning is [SemVer](https://semver.org/spec/v2.0.0.html). Pre-1.0, minor
 bumps stay at `0.1.x` and patch numbers carry both features and fixes.
 
+## [0.1.11] — 2026-07-28
+
+### Added
+
+- **Extracted memories are stored in full** — `title`, `narrative`, `facts`,
+  `concepts`, `files_read` and `files_modified` now cross the wire and land in
+  the database. They were being extracted by the LLM and then thrown away at
+  ingestion, so full-text search only ever looked at one of the five columns it
+  indexes. Searching for a phrase that appears only in a fact now works.
+  Extraction provenance (prompt version and model) is stored too.
+- **Delete a memory** — `DELETE /api/memories/:id`, with a delete button in the
+  viewer for your own memories (admins can delete anyone's). This is the way to
+  pull back a memory that is wrong, misleading, or leaked something past the
+  secret scanners.
+
+### Changed
+
+- **All memory is team memory.** `promotion_state` (`private → pending →
+  team_shared`) is gone: every memory captured against a repo is visible to
+  everyone with access to that repo, from the moment it is ingested. Repo access
+  is the only read gate. The promote / "make private" buttons and the
+  `AZNEX_DEFAULT_PROMOTION` setting are gone with it.
+- **Secret scanning covers every stored field** — client-side scrubbing and the
+  server-side re-scan now run over title, narrative and facts as well as
+  content, since all of those are now persisted.
+- Path anchors are derived at ingestion from the memory's file lists instead of
+  being sent as a separate `anchors` field.
+
+### Removed
+
+- **Freshness / staleness.** `freshness_state`, `confirmed_commit`,
+  `memory_anchor.commit_sha` and the `include_stale` read parameter are gone.
+  The staleness engine that would have set `stale_suspected` was never built, so
+  the only thing the machinery did was carry a column and an unused filter.
+  Memories describe code as it was when captured — verify against current code.
+- The three dropped columns are removed from existing databases by schema
+  migration v2 on the next service start. Rows are preserved.
+
 ## [0.1.10] — 2026-07-28
 
 ### Added
@@ -148,6 +186,7 @@ First published release — the Phase 1 MVP, end to end.
   — frontend tests and build, Docker image job, lockfile fix (#46); Railway
   deployment with same-origin SPA and admin onboarding CLI (#43).
 
+[0.1.11]: https://github.com/shashanknidhi/aznex/releases/tag/v0.1.11
 [0.1.10]: https://github.com/shashanknidhi/aznex/releases/tag/v0.1.10
 [0.1.9]: https://github.com/shashanknidhi/aznex/releases/tag/v0.1.9
 [0.1.8]: https://github.com/shashanknidhi/aznex/releases/tag/v0.1.8

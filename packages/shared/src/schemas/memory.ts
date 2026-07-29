@@ -13,12 +13,8 @@ export const MemoryTypeSchema = z.enum([
 ]);
 export type MemoryType = z.infer<typeof MemoryTypeSchema>;
 
-export const FreshnessStateSchema = z.enum(["fresh", "stale_suspected"]);
-export type FreshnessState = z.infer<typeof FreshnessStateSchema>;
-
-export const PromotionStateSchema = z.enum(["private", "pending", "team_shared"]);
-export type PromotionState = z.infer<typeof PromotionStateSchema>;
-
+// Every ingested memory is visible to the whole repo. There is no promotion or
+// freshness state — deletion is the only way to withdraw a memory.
 export const MemorySchema = z.object({
   id: z.string().min(1),
   repo_fingerprint: z.string().min(1),
@@ -34,9 +30,6 @@ export const MemorySchema = z.object({
   concepts: z.array(z.string()).default([]),
   files_read: z.array(z.string()).default([]),
   files_modified: z.array(z.string()).default([]),
-  freshness_state: FreshnessStateSchema.default("fresh"),
-  promotion_state: PromotionStateSchema.default("private"),
-  confirmed_commit: z.string().nullable().default(null),
   ai_extracted: z.boolean(),
   metadata: z.record(z.string(), z.unknown()).default({}),
   created_at_epoch: z.number().int().nonnegative(),
@@ -45,8 +38,6 @@ export const MemorySchema = z.object({
 export type Memory = z.infer<typeof MemorySchema>;
 
 export const CreateMemorySchema = MemorySchema.omit({
-  freshness_state: true,
-  promotion_state: true,
   created_at_epoch: true,
   updated_at_epoch: true,
 });

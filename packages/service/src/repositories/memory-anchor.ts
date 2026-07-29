@@ -6,15 +6,10 @@ import type { IMemoryAnchorRepository } from './interfaces.js';
 interface MemoryAnchorRow {
   memory_id: string;
   path: string;
-  commit_sha: string | null;
 }
 
 function mapRow(row: MemoryAnchorRow): MemoryAnchor {
-  return MemoryAnchorSchema.parse({
-    memory_id: row.memory_id,
-    path: row.path,
-    commit_sha: row.commit_sha,
-  });
+  return MemoryAnchorSchema.parse({ memory_id: row.memory_id, path: row.path });
 }
 
 export class MemoryAnchorRepository implements IMemoryAnchorRepository {
@@ -24,13 +19,12 @@ export class MemoryAnchorRepository implements IMemoryAnchorRepository {
 
   upsert(anchor: MemoryAnchor): MemoryAnchor {
     const data = MemoryAnchorSchema.parse(anchor);
-    const row = this.db.prepare(`
-      INSERT INTO memory_anchor (memory_id, path, commit_sha)
-      VALUES (?, ?, ?)
-      ON CONFLICT(memory_id, path) DO UPDATE SET commit_sha = excluded.commit_sha
-      RETURNING *
-    `).get(data.memory_id, data.path, data.commit_sha ?? null) as MemoryAnchorRow;
-    return mapRow(row);
+    // (memory_id, path) is the whole row, so a repeat is a no-op.
+    this.db.prepare(`
+      INSERT INTO memory_anchor (memory_id, path) VALUES (?, ?)
+      ON CONFLICT(memory_id, path) DO NOTHING
+    `).run(data.memory_id, data.path);
+    return data;
   }
 
   listByMemory(memoryId: string): MemoryAnchor[] {

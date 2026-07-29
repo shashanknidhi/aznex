@@ -16,7 +16,7 @@ import { loadConfig } from "../config.js";
 import { apiKeyAuth } from "../middleware/auth.js";
 import { verifyRepoAccess } from "../auth/repo-access.js";
 import { RepoRepository } from "../repositories/repo.js";
-import { MemoryRepository, type MemoryFilter } from "../repositories/memory.js";
+import { MemoryRepository } from "../repositories/memory.js";
 import { MemoryAnchorRepository } from "../repositories/memory-anchor.js";
 import { SessionRepository } from "../repositories/session.js";
 import pkg from "../../package.json" with { type: "json" };
@@ -25,13 +25,8 @@ import pkg from "../../package.json" with { type: "json" };
 // query team memory. Stateless transport — every POST carries a full JSON-RPC
 // exchange, so no session bookkeeping server-side.
 
-// Only team-shared knowledge is served; freshness filter is opt-out.
-function readFilter(includeStale: boolean): MemoryFilter {
-  return includeStale
-    ? { promotionState: "team_shared" }
-    : { promotionState: "team_shared", freshnessState: "fresh" };
-}
-
+// Repo access is the only gate: every memory captured against a repo is shared
+// with everyone who can see that repo.
 async function checkRepoAccess(db: Database, user: User, fingerprint: string): Promise<string | null> {
   const repo = new RepoRepository(db).getActiveByFingerprint(fingerprint);
   if (!repo) return "unknown_repo";
@@ -62,19 +57,13 @@ function buildMcpServer(db: Database, user: User): McpServer {
     async (params) => {
       const denied = await checkRepoAccess(db, user, params.repo_fingerprint);
       if (denied) return toolError(denied);
-      const found = memories.search(
-        params.repo_fingerprint,
-        params.query,
-        params.limit ?? 10,
-        readFilter(params.include_stale),
-      );
+      const found = memories.search(params.repo_fingerprint, params.query, params.limit ?? 10);
       return toolResult({
         results: found.map((m: Memory) => ({
           id: m.id,
           type: m.type,
+          title: m.title,
           content: m.content,
-          freshness_state: m.freshness_state,
-          promotion_state: m.promotion_state,
           anchors: anchors.listByMemory(m.id).map((a) => ({ path: a.path })),
           author_id: m.author_id,
           created_at_epoch: m.created_at_epoch,
@@ -93,17 +82,12 @@ function buildMcpServer(db: Database, user: User): McpServer {
     async (params) => {
       const denied = await checkRepoAccess(db, user, params.repo_fingerprint);
       if (denied) return toolError(denied);
-      const items = memories.listByRepo(
-        params.repo_fingerprint,
-        params.limit ?? 20,
-        readFilter(false),
-      );
+      const items = memories.listByRepo(params.repo_fingerprint, params.limit ?? 20);
       return toolResult({
         items: items.map((m: Memory) => ({
           id: m.id,
           type: m.type,
           content: m.content,
-          freshness_state: m.freshness_state,
         })),
       });
     },
@@ -118,11 +102,7 @@ function buildMcpServer(db: Database, user: User): McpServer {
     },
     async (params) => {
       const memory = memories.getById(params.id);
-      // Authors see their own in any state; others only team_shared — and
-      // hidden records look identical to missing ones (don't leak existence).
-      if (!memory || (memory.promotion_state !== "team_shared" && memory.author_id !== user.id)) {
-        return toolError("not_found");
-      }
+      if (!memory) return toolError("not_found");
       const denied = await checkRepoAccess(db, user, memory.repo_fingerprint);
       if (denied) return toolError(denied);
       return toolResult({
@@ -142,23 +122,16 @@ function buildMcpServer(db: Database, user: User): McpServer {
     async (params) => {
       const denied = await checkRepoAccess(db, user, params.repo_fingerprint);
       if (denied) return toolError(denied);
-      const filter = readFilter(params.include_stale);
+      // memory_anchor isn't repo-scoped, so the fingerprint is checked here.
       const found = anchors
         .listByPath(params.path)
         .map((a) => memories.getById(a.memory_id))
-        .filter(
-          (m): m is Memory =>
-            m !== null &&
-            m.repo_fingerprint === params.repo_fingerprint &&
-            m.promotion_state === "team_shared" &&
-            (filter.freshnessState === undefined || m.freshness_state === filter.freshnessState),
-        );
+        .filter((m): m is Memory => m !== null && m.repo_fingerprint === params.repo_fingerprint);
       return toolResult({
         items: found.map((m) => ({
           id: m.id,
           type: m.type,
           content: m.content,
-          freshness_state: m.freshness_state,
           created_at_epoch: m.created_at_epoch,
         })),
       });

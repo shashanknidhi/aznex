@@ -1,18 +1,13 @@
 import type { MemoryItem } from "./api.js";
 
 // Client-side facet filters over the current page of results.
-// ponytail: server-side type/freshness filters when pages get big enough to matter.
+// ponytail: server-side type filter when pages get big enough to matter.
 export interface MemoryFilters {
   type: string | null;
-  freshness: string | null;
 }
 
 export function filterMemories(items: MemoryItem[], filters: MemoryFilters): MemoryItem[] {
-  return items.filter(
-    (m) =>
-      (!filters.type || m.type === filters.type) &&
-      (!filters.freshness || m.freshness_state === filters.freshness),
-  );
+  return items.filter((m) => !filters.type || m.type === filters.type);
 }
 
 export function formatDate(epoch: number): string {

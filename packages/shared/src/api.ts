@@ -1,11 +1,6 @@
 import { z } from "zod";
 import { AgentIdSchema } from "./schemas/session.js";
-import {
-  FreshnessStateSchema,
-  MemoryTypeSchema,
-  PromotionStateSchema,
-} from "./schemas/memory.js";
-import { MemoryAnchorSchema } from "./schemas/memory-anchor.js";
+import { MemoryTypeSchema } from "./schemas/memory.js";
 
 // ── Ingestion (worker → POST /v1/ingest) ─────────────────────────────────────
 
@@ -17,13 +12,23 @@ export const IngestSessionSchema = z.object({
 });
 export type IngestSession = z.infer<typeof IngestSessionSchema>;
 
+// Everything the extractor produces crosses the wire — the memory table (and its
+// FTS index) covers title/narrative/facts/concepts, so dropping them here made
+// four of the five searchable columns permanently empty. Path anchors are derived
+// server-side from files_read ∪ files_modified rather than sent twice.
+// Defaulted fields keep older workers accepted.
 export const IngestMemorySchema = z.object({
   id: z.string().min(1),
   type: MemoryTypeSchema,
+  title: z.string().nullable().default(null),
   content: z.string().min(1),
-  anchors: z.array(MemoryAnchorSchema.omit({ memory_id: true })).default([]),
+  narrative: z.string().nullable().default(null),
+  facts: z.array(z.string()).default([]),
+  concepts: z.array(z.string()).default([]),
+  files_read: z.array(z.string()).default([]),
+  files_modified: z.array(z.string()).default([]),
+  metadata: z.record(z.string(), z.unknown()).default({}),
   ai_extracted: z.boolean(),
-  confirmed_commit: z.string().nullable().optional(),
 });
 export type IngestMemory = z.infer<typeof IngestMemorySchema>;
 
@@ -52,16 +57,14 @@ export const SearchMemoryParamsSchema = z.object({
   query: z.string().min(1),
   repo_fingerprint: z.string().min(1),
   limit: z.number().int().positive().optional(),
-  include_stale: z.boolean().default(false),
 });
 export type SearchMemoryParams = z.infer<typeof SearchMemoryParamsSchema>;
 
 export const SearchMemoryResultSchema = z.object({
   id: z.string(),
   type: MemoryTypeSchema,
+  title: z.string().nullable(),
   content: z.string(),
-  freshness_state: FreshnessStateSchema,
-  promotion_state: PromotionStateSchema,
   anchors: z.array(z.object({ path: z.string() })),
   author_id: z.string(),
   created_at_epoch: z.number(),
@@ -87,7 +90,6 @@ export type GetMemoryParams = z.infer<typeof GetMemoryParamsSchema>;
 export const GetMemoriesByPathParamsSchema = z.object({
   repo_fingerprint: z.string().min(1),
   path: z.string().min(1),
-  include_stale: z.boolean().default(false),
 });
 export type GetMemoriesByPathParams = z.infer<typeof GetMemoriesByPathParamsSchema>;
 
@@ -103,7 +105,6 @@ export const GetRecentContextResponseSchema = z.object({
       id: z.string(),
       type: MemoryTypeSchema,
       content: z.string(),
-      freshness_state: FreshnessStateSchema,
     })
   ),
 });
