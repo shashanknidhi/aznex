@@ -3,16 +3,21 @@ import type { Repo, User } from "@aznex/shared";
 import type { Config } from "../config.js";
 
 // GitHub repo access verification — the load-bearing security step. Given a resolved
-// user and the repo they're writing to, confirm they hold read/collaborator access
-// via the repo's GitHub App installation.
+// user and the repo they're writing to, confirm they are a collaborator on it via the
+// repo's GitHub App installation.
 //
-// We gate on read/member/collaborator access, NOT on PR-ability: on a public repo
-// anyone can fork and open a PR without being a collaborator, so keying on PR-ability
-// would expose that repo's team memory to the world (PRD §9).
+// We gate on collaborator membership, NOT on a permission level and NOT on PR-ability.
+// Both of the latter are universal on a public repo and would expose that repo's team
+// memory to the world (PRD §9):
+//   - anyone can fork and open a PR without being a collaborator;
+//   - GET /collaborators/{user}/permission answers "read" for *any* GitHub login,
+//     because everyone can read a public repo. Verified against a live public repo:
+//     octocat and torvalds both come back "read".
+// GET /collaborators/{user} is the honest signal — 204 for a real collaborator
+// (including org members who inherit access through a team), 404 for everyone else.
 
 export interface RepoAccess {
   allowed: boolean;
-  role?: string;
 }
 
 // ponytail: in-process Map cache. Fine for a single service instance; move to a
@@ -153,16 +158,12 @@ export async function verifyRepoAccess(opts: VerifyOpts): Promise<RepoAccess> {
     if (!tokenRes.ok) return { allowed: false };
     const { token } = (await tokenRes.json()) as { token: string };
 
-    // 2. Check the user's permission level on the repo.
-    const permRes = await doFetch(
-      `https://api.github.com/repos/${repo.canonical}/collaborators/${user.github_login}/permission`,
+    // 2. Is the user a collaborator on the repo? 204 = yes, 404 = no. Any other
+    //    status (rate limit, outage, revoked installation) fails closed.
+    const collabRes = await doFetch(
+      `https://api.github.com/repos/${repo.canonical}/collaborators/${encodeURIComponent(user.github_login)}`,
       { headers: { ...GH_HEADERS, Authorization: `Bearer ${token}` } },
     );
-    if (!permRes.ok) return { allowed: false }; // 404 = not a collaborator
-    const { permission } = (await permRes.json()) as { permission: string };
-
-    // admin | maintain | write | triage | read → has access; none → denied.
-    const allowed = ["admin", "maintain", "write", "triage", "read"].includes(permission);
-    return { allowed, role: permission };
+    return { allowed: collabRes.status === 204 };
   }
 }

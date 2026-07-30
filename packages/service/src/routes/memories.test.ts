@@ -21,7 +21,7 @@ beforeAll(() => {
   process.env["GITHUB_APP_PRIVATE_KEY"] = privateKey.export({ type: "pkcs1", format: "pem" }).toString();
   globalThis.fetch = (async (url: string) => {
     if (String(url).includes("/access_tokens")) return new Response(JSON.stringify({ token: "t" }), { status: 200 });
-    return new Response(JSON.stringify({ permission: "write" }), { status: 200 });
+    return new Response(null, { status: 204 });
   }) as unknown as typeof fetch;
 });
 afterAll(() => { globalThis.fetch = realFetch; });

@@ -96,7 +96,7 @@ Two trust zones: **developer machine** (untrusted clients) and **remote server**
 - `@aznex/worker` runs as a **persistent background daemon** on each developer's machine. It receives agent hooks, runs LLM extraction by **spawning the developer's local Claude Code CLI (their own subscription — no separate API key)**, scrubs secrets, then POSTs only the final structured memory to the service. Raw tool I/O never leaves the machine. The active agent session is completely unaware of this — it just fires hooks.
 - The service is a **dumb authenticated store** for writes — it validates, re-scans for secrets, and persists. All extraction intelligence lives in the worker.
 - Reads (MCP) are agent-agnostic. Capture requires thin per-agent hooks (asymmetry is intentional).
-- All memory is keyed by `repo_fingerprint`. The service verifies the caller's access to that repo against the git host on every request — this is the load-bearing security step.
+- All memory is keyed by `repo_fingerprint`. The service verifies the caller's access to that repo against the git host on every request — this is the load-bearing security step. Access means **collaborator membership** (`GET /repos/{repo}/collaborators/{user}` → 204), never a permission level: GitHub reports `read` for every login on a public repo, so gating on permission level leaks a public repo's memory to anyone with an account.
 - The worker must survive crashes and start on login (`launchd` plist on macOS, `systemd` unit on Linux).
 
 ### Data flow
