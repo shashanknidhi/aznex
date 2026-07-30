@@ -10,6 +10,39 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning is [SemVer](https://semver.org/spec/v2.0.0.html). Pre-1.0, minor
 bumps stay at `0.1.x` and patch numbers carry both features and fixes.
 
+## Unreleased
+
+### Added
+
+- Published the full setup guide as `docs/setup.md`. It had only ever existed on
+  one maintainer's machine, excluded from git, so nobody outside the pilot team
+  could read it.
+- `docs/development.md` — how to run the whole stack from a clone. The service
+  boots with no GitHub credentials at all, which makes a local look-around
+  possible; that was previously undocumented.
+- `CONTRIBUTING.md`, `SECURITY.md` (private vulnerability reporting),
+  `CODE_OF_CONDUCT.md`, issue templates, and a pull request template.
+- `bun run --cwd packages/service seed` — the demo-data seeder existed but had no
+  script, so it could only be run by copying a command out of a source comment.
+- Documented the fresh-database bootstrap: a new deployment has no organizations
+  and sign-in needs one, so `AZNEX_ADMIN_GITHUB_LOGINS` must be set before the
+  first sign-in or nobody can get in.
+- Documented that removing an org member does **not** revoke their API keys, and
+  the `org` / `org_membership` state machines in `docs/data-lifecycle.md`.
+
+### Fixed
+
+- `.env.example` advertised `AZNEX_ALLOWED_GITHUB_LOGINS` as a live
+  authentication allowlist. No code has read it since org membership replaced it
+  in 0.1.12. Removed, and the `AZNEX_ADMIN_GITHUB_LOGINS` description corrected
+  to describe super admins.
+- `.env.example` now covers every environment variable the code reads —
+  `AZNEX_DB_PATH`, `CLAUDE_CODE_PATH`, `CODEX_PATH`, `CODEX_HOME`,
+  `AZNEX_EXTRACT_AGENT`, `AZNEX_EXTRACT_MODEL` and `AZNEX_AUTO_UPDATE` were
+  missing.
+- `packages/service/README.md` listed two MCP tools; there are five.
+- `packages/worker/README.md` documented three of the worker's six CLI commands.
+
 ## [0.1.12] — 2026-07-30
 
 ### Added

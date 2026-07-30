@@ -8,6 +8,45 @@ State machines for every entity that has a lifecycle in Aznex. Immutable entitie
 
 ---
 
+## Org — `status`
+
+One tenant, usually one company. Every repo names its owner via `repo.org_id`, so an org's status gates every repo it owns.
+
+```mermaid
+stateDiagram-v2
+    [*] --> active : created by a super admin\n(UI or admin-cli add-org)
+    active --> suspended : suspend (super admin)
+    suspended --> active : resume (super admin)
+```
+
+**Notes:**
+- `suspended` stops all of the org's ingest, MCP reads and viewer access immediately, and leaves every row in place. Resuming restores access. It is the tenant-level equivalent of removing a member: access is cut, knowledge is kept.
+- One of the two gates in `auth/authorize.ts` is "caller is a member of the repo's org **and** that org is `active`". Suspension is enforced there, on every request — not by a flag checked at sign-in.
+- A fresh database has no orgs at all, and sign-in requires super admin or membership in an active org. The first org therefore comes from a super admin listed in `AZNEX_ADMIN_GITHUB_LOGINS`, or from `admin-cli.ts add-org`.
+- There is no deletion transition. Nothing in the product removes an org.
+
+---
+
+## OrgMembership — `role`
+
+```mermaid
+stateDiagram-v2
+    [*] --> member : invited by GitHub login
+    [*] --> admin : invited as admin
+    member --> admin : promote (org admin)
+    admin --> member : demote (org admin)
+    member --> [*] : remove
+    admin --> [*] : remove
+```
+
+**Notes:**
+- Keyed by **GitHub login, not `user_id`** — so an admin can invite someone who has never signed in. The login binds to a `user` row lazily, on that person's first sign-in.
+- Removal cuts access on the very next request, and leaves the memories that person captured with the team.
+- Removal does **not** revoke their API keys. The keys grant nothing without a membership, but the rows stay valid and should be revoked explicitly (`POST /api/orgs/:orgId/keys/:keyId/revoke`) when someone leaves for good.
+- Super admin is not a role here. It comes only from `AZNEX_ADMIN_GITHUB_LOGINS`, so a compromised org admin can never escalate into it, and it carries no memory-read bypass.
+
+---
+
 ## Memory — no lifecycle
 
 A memory has no visibility or freshness state. It is created by ingestion, readable by everyone with access to its repo from that moment, and deleted or not.
