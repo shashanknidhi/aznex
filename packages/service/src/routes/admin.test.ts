@@ -20,9 +20,9 @@ beforeAll(() => {
     if (u.includes("/repos/") && u.endsWith("/installation")) return new Response("not installed", { status: 404 });
     if (u.includes("/access_tokens")) return new Response(JSON.stringify({ token: "t" }), { status: 200 });
     if (u.endsWith("/repos/acme/newrepo")) return new Response(JSON.stringify({ id: 4242 }), { status: 200 });
-    if (u.includes("/collaborators/alice/permission") && u.includes("secretrepo"))
-      return new Response(JSON.stringify({ permission: "none" }), { status: 200 });
-    if (u.includes("/permission")) return new Response(JSON.stringify({ permission: "write" }), { status: 200 });
+    if (u.includes("/collaborators/alice") && u.includes("secretrepo"))
+      return new Response(null, { status: 404 }); // alice is not a collaborator there
+    if (u.includes("/collaborators/")) return new Response(null, { status: 204 });
     if (u.endsWith("/installation/repositories?per_page=100"))
       return new Response(JSON.stringify({ repositories: [
         { id: 4242, full_name: "acme/newrepo" },
@@ -153,7 +153,7 @@ test("admin without GitHub access to the repo cannot onboard it", async () => {
   process.env["AZNEX_ADMIN_GITHUB_LOGINS"] = "alice";
   const { app, cookie } = await seedApp();
   // resolveRepoInstallation only knows acme/newrepo; use secretrepo via sync test instead:
-  // single-add path is covered by the permission=none mock through callerCanAccess:
+  // single-add path is covered by the not-a-collaborator (404) mock via callerCanAccess:
   const res = await app.request("/api/admin/repos", {
     method: "POST",
     headers: { Cookie: cookie, "Content-Type": "application/json" },

@@ -22,7 +22,7 @@ beforeAll(() => {
     // Only intercept GitHub API calls; better-auth and app.request stay local.
     if (u.includes("api.github.com")) {
       if (u.includes("/access_tokens")) return new Response(JSON.stringify({ token: "t" }), { status: 200 });
-      return new Response(JSON.stringify({ permission: "write" }), { status: 200 });
+      return new Response(null, { status: 204 });
     }
     return realFetch(url as string, init);
   }) as unknown as typeof fetch;
