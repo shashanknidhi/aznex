@@ -1,0 +1,76 @@
+name: Bug report
+description: Something is broken — capture, reads, the service, or the viewer
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        If this is a security issue, **stop** — report it privately instead.
+        See [SECURITY.md](../blob/main/SECURITY.md).
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options:
+        - worker (capture, extraction, daemon, hooks)
+        - service (ingest API, MCP, frontend API)
+        - frontend (memory viewer)
+        - plugin (Claude Code plugin channel)
+        - install / setup
+        - not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you expected, and what happened instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. ...
+        2. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: doctor
+    attributes:
+      label: aznex-worker doctor output
+      description: >
+        For anything worker- or capture-related, please paste this — it checks
+        config, extraction engine, daemon, worker, service, API key, hooks, and
+        MCP wiring, and usually identifies the problem on its own. Skip if the
+        issue is service- or viewer-only.
+      render: shell
+      placeholder: $ aznex-worker doctor
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Worker log
+      description: >
+        `tail -50 ~/.aznex/logs/worker.log` — the worker logs a reason for every
+        dropped session. Please redact anything sensitive.
+      render: shell
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: >
+        Worker version — `bun pm ls -g | grep aznex`. For the service, the
+        commit or release you deployed.
+
+  - type: input
+    id: environment
+    attributes:
+      label: OS and coding agent
+      placeholder: macOS 15, Claude Code / Codex

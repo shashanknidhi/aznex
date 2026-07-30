@@ -62,110 +62,57 @@ One command. Get the **service URL** from your admin — that's all you need:
 curl -fsSL <SERVICE_URL>/install.sh | bash
 ```
 
-It installs Bun if you don't have it, installs `@aznex/worker`, and runs
-setup: your browser opens for GitHub sign-in (no API key to copy), then it
-writes `~/.aznex/config.json`, installs the background worker daemon (starts
-at login, restarts on crash), wires the capture hooks for every supported
-agent it finds — Claude Code and Codex — including team-memory context
-injection at session start, and registers the `aznex` MCP server for reads.
-Works in every repo on the machine; sessions in repos your admin hasn't
-onboarded are skipped automatically.
+It installs Bun if missing, installs `@aznex/worker`, opens your browser for
+GitHub sign-in (no API key to copy), then installs the background daemon, wires
+capture hooks for every supported agent it finds — Claude Code and Codex — and
+registers the `aznex` MCP server for reads. Verify with `aznex-worker doctor`.
 
 **Requirements:** Claude Code or Codex, installed and logged in — extraction
-runs on your own subscription via whichever CLI is present (Claude Code is
-preferred when both are). Bun is auto-installed if missing. Headless/CI
-machines: pass a pre-minted key via `--api-key`.
+runs on your own subscription via whichever CLI is present.
 
-Re-running setup is safe and idempotent: it reuses the API key already in
-`~/.aznex/config.json` when that key still works, leaves your tuning
-settings alone, and only re-authorizes if the key is gone or revoked. Pass
-`--new-key` to force a fresh key.
+> `bun install -g @aznex/worker` alone installs the binary only — it does not
+> authenticate, install the daemon, or register hooks/MCP. Go through
+> `install.sh` (or run `aznex-worker setup` yourself).
 
-> **Note:** `bun install -g @aznex/worker` alone installs the binary only —
-> it does not authenticate, install the daemon, or register hooks/MCP. Always
-> go through `install.sh` (or run `aznex-worker setup` yourself).
-
-Verify anytime:
-
-```sh
-aznex-worker doctor    # ✓/✗ checks: config, extraction engine, daemon, worker,
-                       # service, key, Claude Code hooks + MCP, Codex hooks + MCP
-```
-
-First success: open a Claude Code or Codex session in an onboarded repo — a
-`# Team memory (aznex)` block appears at session start. End the session and
-your extracted memories show up in the viewer (`<SERVICE_URL>`) within a
-minute. Tune the worker (coding agent, extraction model, context-injection
-knobs) at http://localhost:29639 — extraction defaults to the cheapest model
-your chosen agent offers.
-
-**Alternative: plugin channel.** Prefer hooks via `/plugin` instead of
-`~/.claude/settings.json`? Install the plugin, then run setup for auth +
-daemon (pick **one** hook channel — both at once doubles the injected
-context):
-
-```
-/plugin marketplace add shashanknidhi/aznex
-/plugin install aznex@aznex
-```
-```sh
-npx aznex-worker setup
-```
-
-See [plugin/README.md](plugin/README.md).
-
-**Codex.** Setup wires Codex automatically when `codex` is on your PATH:
-relays into `~/.codex/hooks.json` for capture and an `[mcp_servers.aznex]`
-block in `~/.codex/config.toml` for reads. One manual step remains — Codex
-runs only hooks you have approved, so start `codex` once and accept the hook
-review prompt. Until you do, Codex sessions capture nothing (and
-`aznex-worker doctor` can't tell, since trust isn't readable from disk).
-File-anchored injection on read stays Claude-Code-only; session-start team
-memory works in both.
-
-**Troubleshooting** — run `aznex-worker doctor` first; it diagnoses the
-common cases with a fix per finding. Beyond that:
-
-| Symptom | Fix |
-|---|---|
-| Sessions produce no memories | `tail -50 ~/.aznex/logs/worker.log` — the worker logs every drop reason (most common: repo not onboarded by admin) |
-| A memory is wrong or leaked something | Delete it in the viewer (author or admin) — deletion is the only way to withdraw a memory |
-| Uninstall | `aznex-worker uninstall` |
+**→ [Full setup guide](docs/setup.md)** — the plugin channel, the one manual
+Codex step, tuning, troubleshooting, and uninstall.
 
 ### For admins (once per team)
 
-1. **Deploy the service** — Railway: New Project → Deploy from GitHub → this
-   repo (`railway.json` configures the build); attach a volume at `/app/data`;
-   generate a domain — that's your `<SERVICE_URL>`. Self-host instead:
-   `docker compose -f docker/docker-compose.yml up` (env in `.env`).
-2. **GitHub credentials** — a **GitHub App** (repo *Metadata: read*; install it
-   on your org; note App ID, private key, and set its Setup URL to
-   `<SERVICE_URL>/github/setup` with "Redirect on update" on) and a **GitHub
-   OAuth app** (callback `<SERVICE_URL>/api/auth/callback/github`).
-3. **Environment variables** on the service:
+Deploy the service (Railway or Docker), create a GitHub App and OAuth app, set
+the environment variables, create an organization, onboard repos, then send
+developers the service URL.
 
-   ```
-   DATABASE_PATH=/app/data/aznex.db
-   GITHUB_APP_ID=…            GITHUB_APP_PRIVATE_KEY=…
-   GITHUB_OAUTH_CLIENT_ID=…   GITHUB_OAUTH_CLIENT_SECRET=…
-   BETTER_AUTH_SECRET=…       # openssl rand -hex 32
-   AZNEX_BASE_URL=<SERVICE_URL>
-   AZNEX_FRONTEND_ORIGIN=<SERVICE_URL>
-   AZNEX_ADMIN_GITHUB_LOGINS=alice          # super admins: create orgs, appoint org admins
-   AZNEX_GITHUB_APP_SLUG=<app-slug>
-   ```
-
-   Redeploy; `curl <SERVICE_URL>/health` → `{"ok":true}`.
-4. **Create an organization** — sign in as a super admin, open *Manage
-   organizations*, and create one per company with its admins' GitHub
-   usernames. Org admins then onboard their own repos and add their own
-   members; sign-in requires an org membership, so no further env edits.
-5. **Onboard repos** — as an org admin, use "Install / pick repos on GitHub"
-   (or onboard one repo by name). Then send developers the `<SERVICE_URL>`.
+**→ [Admin setup](docs/setup.md#admin-setup-once)** — every step with the exact
+callback URLs and variables.
 
 One deployment hosts several organizations. Repo memory is gated twice on every
 request: membership in the repo's org, and GitHub collaborator access to the
 repo itself.
+
+### For contributors
+
+Run the whole stack from a clone — no credentials needed for a first boot:
+
+```sh
+git clone https://github.com/shashanknidhi/aznex && cd aznex
+bun install
+cp .env.example .env
+bun run dev:service            # http://localhost:3000
+```
+
+**→ [Development guide](docs/development.md)** · **[Contributing](CONTRIBUTING.md)**
+
+## Documentation
+
+| Doc | What |
+|---|---|
+| [docs/setup.md](docs/setup.md) | Install and deploy Aznex — developer and admin |
+| [docs/development.md](docs/development.md) | Run from a clone, tests, seeding, Docker |
+| [docs/data-lifecycle.md](docs/data-lifecycle.md) | Entity state machines |
+| [packages/service/README.md](packages/service/README.md) | HTTP surface, MCP tools, admin CLI |
+| [packages/worker/README.md](packages/worker/README.md) | Worker internals, CLI, hook wiring |
+| [CONTRIBUTING.md](CONTRIBUTING.md) · [SECURITY.md](SECURITY.md) | How to contribute; reporting vulnerabilities |
 
 ## Status
 

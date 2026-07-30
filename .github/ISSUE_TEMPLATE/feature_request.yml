@@ -1,0 +1,39 @@
+name: Feature request
+description: Suggest a capability or a change in behavior
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: >
+        What are you trying to do that Aznex makes hard or impossible today?
+        Describe the situation, not the solution.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you'd like instead
+    validations:
+      required: true
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Which part
+      options:
+        - worker (capture, extraction, hooks)
+        - service (ingest API, MCP, frontend API)
+        - frontend (memory viewer)
+        - a new agent integration
+        - other / not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered
+      description: Including any workaround you're using now.
