@@ -3,8 +3,7 @@ import { IngestRequestSchema, scanSecrets, type IngestMemory } from "@aznex/shar
 import type { AppEnv } from "../app.js";
 import { loadConfig } from "../config.js";
 import { apiKeyAuth } from "../middleware/auth.js";
-import { verifyRepoAccess } from "../auth/repo-access.js";
-import { RepoRepository } from "../repositories/repo.js";
+import { authorizeRepo, isDenial } from "../auth/authorize.js";
 import { SessionRepository } from "../repositories/session.js";
 import { MemoryRepository } from "../repositories/memory.js";
 import { MemoryAnchorRepository } from "../repositories/memory-anchor.js";
@@ -21,11 +20,11 @@ export function registerIngestRoutes(app: Hono<AppEnv>): void {
     const user = c.get("user");
     const db = c.get("db");
 
-    // Repo must be known to the service (onboarded) and the caller must have access.
-    const repo = new RepoRepository(db).getActiveByFingerprint(req.repo_fingerprint);
-    if (!repo) return c.json({ error: "unknown_repo" }, 403);
-    const access = await verifyRepoAccess({ user, repo, config: loadConfig() });
-    if (!access.allowed) return c.json({ error: "forbidden" }, 403);
+    // Repo must be onboarded, its org active, and the caller both an org member
+    // and a GitHub collaborator on it.
+    const auth = await authorizeRepo({ db, user, fingerprint: req.repo_fingerprint, config: loadConfig() });
+    if (isDenial(auth)) return c.json({ error: auth }, 403);
+    const { repo } = auth;
 
     // Persist the session idempotently before its memories.
     const sessions = new SessionRepository(db);

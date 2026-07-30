@@ -55,6 +55,15 @@ export class UserRepository implements IUserRepository {
     return row ? mapRow(row) : null;
   }
 
+  // Org membership is keyed by login, so resolving login → user is how an invite
+  // binds to an account. Case-insensitive: GitHub logins are.
+  getByGithubLogin(login: string): User | null {
+    const row = this.db
+      .prepare('SELECT * FROM user WHERE github_login = ? COLLATE NOCASE')
+      .get(login.trim()) as UserRow | null;
+    return row ? mapRow(row) : null;
+  }
+
   update(id: string, input: Partial<CreateUser>): User | null {
     const existing = this.getById(id);
     if (!existing) return null;

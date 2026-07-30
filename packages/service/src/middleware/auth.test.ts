@@ -5,6 +5,7 @@ import type { AppEnv } from "../app.js";
 import { UserRepository } from "../repositories/user.js";
 import { ApiKeyRepository } from "../repositories/api-key.js";
 import { apiKeyAuth, hashToken } from "./auth.js";
+import { seedOrg } from "../test-support.js";
 
 function appWithKey(opts: { expires?: number | null; status?: "active" | "revoked" } = {}) {
   const db = openDatabase(":memory:");
@@ -16,6 +17,7 @@ function appWithKey(opts: { expires?: number | null; status?: "active" | "revoke
     scopes: ["ingest"], status: opts.status ?? "active",
     last_used_at_epoch: null, expires_at_epoch: opts.expires ?? null, metadata: {},
   });
+  seedOrg(db, { alice: "member" });
   const app = new Hono<AppEnv>();
   app.use("*", async (c, next) => { c.set("db", db); await next(); });
   app.get("/protected", apiKeyAuth(), (c) => c.json({ user: c.get("user").github_login }));
@@ -50,19 +52,31 @@ test("expired key → 401", async () => {
   expect(res.status).toBe(401);
 });
 
-import { githubLoginAllowed } from "./auth.js";
+import { isSuperAdmin, loginAllowed } from "./auth.js";
+import { OrgRepository } from "../repositories/org.js";
 
-test("allowlist: unset means open, set means exact-match (case-insensitive)", () => {
-  delete process.env["AZNEX_ALLOWED_GITHUB_LOGINS"];
-  expect(githubLoginAllowed("anyone")).toBe(true);
+test("sign-in gate: org membership, or super admin", () => {
+  const db = openDatabase(":memory:");
+  delete process.env["AZNEX_ADMIN_GITHUB_LOGINS"];
 
-  process.env["AZNEX_ALLOWED_GITHUB_LOGINS"] = "Alice, bob ,carol";
-  expect(githubLoginAllowed("alice")).toBe(true);
-  expect(githubLoginAllowed("BOB")).toBe(true);
-  expect(githubLoginAllowed("mallory")).toBe(false);
-  expect(githubLoginAllowed("ali")).toBe(false);
+  // No orgs at all: nobody may sign in. The deployment is bootstrapped with
+  // admin-cli add-org, not by letting strangers in.
+  expect(loginAllowed(db, "alice")).toBe(false);
 
-  process.env["AZNEX_ALLOWED_GITHUB_LOGINS"] = "  ";
-  expect(githubLoginAllowed("anyone")).toBe(true); // blank = unset
-  delete process.env["AZNEX_ALLOWED_GITHUB_LOGINS"];
+  const orgId = seedOrg(db, { Alice: "member" });
+  expect(loginAllowed(db, "alice")).toBe(true);
+  expect(loginAllowed(db, "ALICE")).toBe(true); // GitHub logins are case-insensitive
+  expect(loginAllowed(db, "mallory")).toBe(false);
+
+  // Suspending the org locks its members out without deleting anything.
+  new OrgRepository(db).update(orgId, { status: "suspended" });
+  expect(loginAllowed(db, "alice")).toBe(false);
+
+  // A super admin never depends on membership — they must be able to get in and
+  // create the first org.
+  process.env["AZNEX_ADMIN_GITHUB_LOGINS"] = "Root, other";
+  expect(loginAllowed(db, "root")).toBe(true);
+  expect(isSuperAdmin("ROOT")).toBe(true);
+  expect(isSuperAdmin("alice")).toBe(false);
+  delete process.env["AZNEX_ADMIN_GITHUB_LOGINS"];
 });

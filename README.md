@@ -151,15 +151,21 @@ common cases with a fix per finding. Beyond that:
    BETTER_AUTH_SECRET=…       # openssl rand -hex 32
    AZNEX_BASE_URL=<SERVICE_URL>
    AZNEX_FRONTEND_ORIGIN=<SERVICE_URL>
-   AZNEX_ALLOWED_GITHUB_LOGINS=alice,bob    # who may sign in
-   AZNEX_ADMIN_GITHUB_LOGINS=alice          # who may onboard repos
+   AZNEX_ADMIN_GITHUB_LOGINS=alice          # super admins: create orgs, appoint org admins
    AZNEX_GITHUB_APP_SLUG=<app-slug>
    ```
 
    Redeploy; `curl <SERVICE_URL>/health` → `{"ok":true}`.
-4. **Onboard repos** — sign in to the viewer as an admin and use
-   "Install / pick repos on GitHub" (or onboard one repo by name). Then send
-   developers the `<SERVICE_URL>` — they self-serve from there.
+4. **Create an organization** — sign in as a super admin, open *Manage
+   organizations*, and create one per company with its admins' GitHub
+   usernames. Org admins then onboard their own repos and add their own
+   members; sign-in requires an org membership, so no further env edits.
+5. **Onboard repos** — as an org admin, use "Install / pick repos on GitHub"
+   (or onboard one repo by name). Then send developers the `<SERVICE_URL>`.
+
+One deployment hosts several organizations. Repo memory is gated twice on every
+request: membership in the repo's org, and GitHub collaborator access to the
+repo itself.
 
 ## Status
 

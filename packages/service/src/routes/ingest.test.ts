@@ -11,6 +11,8 @@ import { MemoryRepository } from "../repositories/memory.js";
 import { MemoryAnchorRepository } from "../repositories/memory-anchor.js";
 import { hashToken } from "../middleware/auth.js";
 import { clearRepoAccessCache } from "../auth/repo-access.js";
+import { seedOrg } from "../test-support.js";
+import { OrgRepository } from "../repositories/org.js";
 
 const TOKEN = "worker-token";
 const realFetch = globalThis.fetch;
@@ -40,11 +42,12 @@ function seed() {
   new GithubInstallationRepository(db).create({
     installation_id: 42, account_type: "org", account_login: "acme", metadata: {},
   });
+  const orgId = seedOrg(db);
   new RepoRepository(db).create({
     fingerprint: "github.com/acme/widget", canonical: "acme/widget",
-    github_repo_id: "9001", github_installation_id: 42, status: "active", metadata: {},
+    github_repo_id: "9001", github_installation_id: 42, org_id: orgId, status: "active", metadata: {},
   });
-  return { db, app: createApp(db) };
+  return { db, app: createApp(db), orgId };
 }
 
 function post(app: ReturnType<typeof createApp>, body: unknown, token = TOKEN) {
@@ -163,4 +166,46 @@ test("bad token → 401", async () => {
   const { app } = seed();
   const res = await post(app, baseReq([]), "wrong");
   expect(res.status).toBe(401);
+});
+
+// Ingest is the write half of the same gate. GitHub still says "collaborator"
+// here, so the missing membership row is the only thing denying the worker.
+// Alice keeps a membership elsewhere so her key still authenticates.
+test("a removed org member cannot ingest, and nothing they wrote is lost", async () => {
+  const { db, app } = seed();
+  expect((await post(app, baseReq([mem({ id: "mem_before", content: "kept" })]))).status).toBe(202);
+
+  const orgs = new OrgRepository(db);
+  const elsewhere = orgs.create({ slug: "elsewhere", name: "Elsewhere", status: "active", metadata: {} });
+  orgs.setMember(elsewhere.id, "alice", "member");
+  orgs.removeMember(orgs.getBySlug("acme")!.id, "alice");
+  clearRepoAccessCache();
+
+  const res = await post(app, baseReq([mem({ id: "mem_after", content: "rejected" })]));
+  expect(res.status).toBe(403);
+  expect(((await res.json()) as any).error).toBe("forbidden");
+  const memories = new MemoryRepository(db);
+  expect(memories.getById("mem_after")).toBeNull();
+  expect(memories.getById("mem_before")?.content).toBe("kept");
+});
+
+test("suspending the org stops ingest", async () => {
+  const { db, app } = seed();
+  const orgs = new OrgRepository(db);
+  const elsewhere = orgs.create({ slug: "elsewhere", name: "Elsewhere", status: "active", metadata: {} });
+  orgs.setMember(elsewhere.id, "alice", "member");
+  orgs.update(orgs.getBySlug("acme")!.id, { status: "suspended" });
+  clearRepoAccessCache();
+  expect((await post(app, baseReq([mem({ id: "mem_x", content: "note" })]))).status).toBe(403);
+});
+
+// With no org membership left, the API key itself stops working.
+test("a login with no org at all is rejected before ingest runs", async () => {
+  const { db, app } = seed();
+  const orgs = new OrgRepository(db);
+  orgs.removeMember(orgs.getBySlug("acme")!.id, "alice");
+  clearRepoAccessCache();
+  const res = await post(app, baseReq([mem({ id: "mem_y", content: "note" })]));
+  expect(res.status).toBe(403);
+  expect(((await res.json()) as any).error).toBe("github_login_not_allowed");
 });

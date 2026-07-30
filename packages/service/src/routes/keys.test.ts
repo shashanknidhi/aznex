@@ -5,6 +5,7 @@ import { createApp } from "../app.js";
 import { createAuth, migrateAuthSchema } from "../auth/session.js";
 import { mintApiKey } from "../auth/mint-key.js";
 import { UserRepository } from "../repositories/user.js";
+import { seedOrg } from "../test-support.js";
 
 beforeAll(() => {
   const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
@@ -18,6 +19,7 @@ async function seed() {
   const auth = createAuth(db, { testMode: true });
   await migrateAuthSchema(auth);
   const app = createApp(db, { auth });
+  const orgId = seedOrg(db, { alice: "member", mallory: "member" });
   const res = await app.request("/api/auth/sign-up/email", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -33,7 +35,7 @@ async function seed() {
   const aliceToken = mintApiKey(db, alice.id, "laptop");
   mintApiKey(db, alice.id, "old-laptop");
   const malloryToken = mintApiKey(db, mallory.id, "mallory-key");
-  return { db, app, cookie, aliceToken, malloryToken };
+  return { db, app, cookie, aliceToken, malloryToken, orgId };
 }
 
 test("users list only their own keys, with prefix and usage metadata", async () => {

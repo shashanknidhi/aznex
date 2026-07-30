@@ -4,6 +4,7 @@ import { openDatabase } from "../db/connection.js";
 import { createApp } from "../app.js";
 import { createAuth, migrateAuthSchema } from "../auth/session.js";
 import { clearCliAuthCodes } from "./cli-auth.js";
+import { seedOrg } from "../test-support.js";
 
 const realFetch = globalThis.fetch;
 
@@ -21,6 +22,7 @@ async function seed() {
   const auth = createAuth(db, { testMode: true });
   await migrateAuthSchema(auth);
   const app = createApp(db, { auth });
+  seedOrg(db, { dev: "member" });
   const res = await app.request("/api/auth/sign-up/email", {
     method: "POST",
     headers: { "Content-Type": "application/json" },

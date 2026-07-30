@@ -11,6 +11,8 @@ import { MemoryAnchorRepository } from "../repositories/memory-anchor.js";
 import { SessionRepository } from "../repositories/session.js";
 import { hashToken } from "../middleware/auth.js";
 import { clearRepoAccessCache } from "../auth/repo-access.js";
+import { seedOrg } from "../test-support.js";
+import { OrgRepository } from "../repositories/org.js";
 
 const TOKEN = "mcp-token";
 const FP = "github.com/acme/widget";
@@ -40,9 +42,10 @@ function seed() {
   new GithubInstallationRepository(db).create({
     installation_id: 42, account_type: "org", account_login: "acme", metadata: {},
   });
+  const orgId = seedOrg(db, { alice: "member", mallory: "member", seeder: "member" });
   new RepoRepository(db).create({
     fingerprint: FP, canonical: "acme/widget",
-    github_repo_id: "9001", github_installation_id: 42, status: "active", metadata: {},
+    github_repo_id: "9001", github_installation_id: 42, org_id: orgId, status: "active", metadata: {},
   });
 
   // Every memory captured against the repo is readable by every repo member,
@@ -177,4 +180,46 @@ test("list_sessions returns the repo timeline", async () => {
   expect(payload.items).toEqual([
     { id: "sess_1", agent: "claude-code", started_at_epoch: 1000, ended_at_epoch: 2000 },
   ]);
+});
+
+// The org gate is what makes removing a member actually stop their agent: the
+// GitHub stub in this file says "collaborator" for everyone, so only the missing
+// membership row can deny it. Alice keeps a membership in an unrelated org, so she
+// still authenticates — this isolates authorizeRepo from the sign-in gate.
+test("a removed org member's MCP calls are denied even though GitHub still allows them", async () => {
+  const { db, app } = seed();
+  const before = await callTool(app, "get_recent_context", { repo_fingerprint: FP });
+  expect(((await before.json()) as any).result.isError).toBeUndefined();
+
+  const orgs = new OrgRepository(db);
+  const elsewhere = orgs.create({ slug: "elsewhere", name: "Elsewhere", status: "active", metadata: {} });
+  orgs.setMember(elsewhere.id, "alice", "admin");
+  orgs.removeMember(orgs.getBySlug("acme")!.id, "alice");
+  clearRepoAccessCache();
+
+  const after = (await (await callTool(app, "get_recent_context", { repo_fingerprint: FP })).json()) as any;
+  expect(after.result.isError).toBe(true);
+  expect(after.result.content[0].text).toBe("forbidden");
+});
+
+test("suspending the org denies MCP for its members", async () => {
+  const { db, app } = seed();
+  const orgs = new OrgRepository(db);
+  const elsewhere = orgs.create({ slug: "elsewhere", name: "Elsewhere", status: "active", metadata: {} });
+  orgs.setMember(elsewhere.id, "alice", "member"); // keeps sign-in working
+  orgs.update(orgs.getBySlug("acme")!.id, { status: "suspended" });
+  clearRepoAccessCache();
+  const res = (await (await callTool(app, "search_memory", { query: "auth", repo_fingerprint: FP })).json()) as any;
+  expect(res.result.isError).toBe(true);
+  expect(res.result.content[0].text).toBe("forbidden");
+});
+
+// Losing every membership fails earlier still: the API key stops authenticating.
+test("a login with no org at all cannot even authenticate to MCP", async () => {
+  const { db, app } = seed();
+  const orgs = new OrgRepository(db);
+  orgs.removeMember(orgs.getBySlug("acme")!.id, "alice");
+  clearRepoAccessCache();
+  const res = await callTool(app, "get_recent_context", { repo_fingerprint: FP });
+  expect(res.status).toBe(403);
 });

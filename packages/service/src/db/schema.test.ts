@@ -66,6 +66,7 @@ describe('seed → CRUD → FTS5', () => {
       canonical: 'acme/widget',
       github_repo_id: '9001',
       github_installation_id: 42,
+      org_id: null,
       status: 'active',
       metadata: {},
     });
@@ -160,8 +161,8 @@ describe('seed → CRUD → FTS5', () => {
 
     const user = users.create({ github_id: '2001', github_login: 'bob', display_name: null, avatar_url: null, metadata: {} });
     installations.create({ installation_id: 99, account_type: 'user', account_login: 'bob', metadata: {} });
-    const repoA = repos.create({ fingerprint: 'github.com/bob/a', canonical: 'bob/a', github_repo_id: '111', github_installation_id: 99, status: 'active', metadata: {} });
-    const repoB = repos.create({ fingerprint: 'github.com/bob/b', canonical: 'bob/b', github_repo_id: '222', github_installation_id: 99, status: 'active', metadata: {} });
+    const repoA = repos.create({ fingerprint: 'github.com/bob/a', canonical: 'bob/a', github_repo_id: '111', github_installation_id: 99, org_id: null, status: 'active', metadata: {} });
+    const repoB = repos.create({ fingerprint: 'github.com/bob/b', canonical: 'bob/b', github_repo_id: '222', github_installation_id: 99, org_id: null, status: 'active', metadata: {} });
     const session = sessions.create({ id: 'sess_a', repo_fingerprint: repoA.fingerprint, repo_canonical: repoA.canonical, author_id: user.id, agent: 'codex', platform_source: 'codex', status: 'active', metadata: {}, started_at_epoch: Date.now(), ended_at_epoch: null });
 
     // session belongs to repoA but memory is for repoB — integrity trigger fires
@@ -187,7 +188,7 @@ describe('seed → CRUD → FTS5', () => {
 
     const u = users.create({ github_id: '3001', github_login: 'carol', display_name: null, avatar_url: null, metadata: {} });
     installations.create({ installation_id: 77, account_type: 'org', account_login: 'corp', metadata: {} });
-    const r = repos.create({ fingerprint: 'github.com/corp/x', canonical: 'corp/x', github_repo_id: '555', github_installation_id: 77, status: 'active', metadata: {} });
+    const r = repos.create({ fingerprint: 'github.com/corp/x', canonical: 'corp/x', github_repo_id: '555', github_installation_id: 77, org_id: null, status: 'active', metadata: {} });
 
     const m1 = members.upsert({ repo_id: r.id, user_id: u.id, github_role: 'read', synced_at_epoch: 1000 });
     expect(m1.github_role).toBe('read');

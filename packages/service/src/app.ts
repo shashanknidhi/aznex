@@ -1,21 +1,26 @@
 import { Hono } from "hono";
 import type { Database } from "bun:sqlite";
-import type { User } from "@aznex/shared";
+import type { Org, OrgRole, User } from "@aznex/shared";
 import pkg from "../package.json" with { type: "json" };
 import { registerIngestRoutes } from "./routes/ingest.js";
 import { registerMcpRoutes } from "./routes/mcp.js";
 import { registerMemoryRoutes } from "./routes/memories.js";
 import { registerRepoRoutes } from "./routes/repos.js";
+import { registerOrgRoutes } from "./routes/orgs.js";
+import { reposWithoutOrg } from "./db/migrations.js";
 import { registerCliAuthRoutes } from "./routes/cli-auth.js";
 import { registerAdminRoutes } from "./routes/admin.js";
 import { registerKeyRoutes } from "./routes/keys.js";
 import type { Auth } from "./auth/session.js";
 
-// Context shared across all handlers. `user` is set by the auth middleware (#10).
+// Context shared across all handlers. `user` is set by the auth middleware (#10);
+// `org`/`orgRole` by the org guards in middleware/org.ts on :orgId routes.
 export interface AppEnv {
   Variables: {
     db: Database;
     user: User;
+    org: Org;
+    orgRole: OrgRole;
   };
 }
 
@@ -32,7 +37,21 @@ export function createApp(
     await next();
   });
 
-  app.get("/health", (c) => c.json({ ok: true, version: pkg.version }));
+  // An active repo with no org is denied by authorizeRepo, so it is an outage
+  // for that repo. Report it here so a bad deploy is visible rather than showing
+  // up as mysterious 403s.
+  //
+  // Still 200, deliberately: railway.json health-checks this path, and failing
+  // it would roll the deploy back — turning a data-integrity warning about a
+  // few repos into a total outage. The `degraded` field is the signal.
+  app.get("/health", (c) => {
+    const orphans = reposWithoutOrg(c.get("db"));
+    return c.json(
+      orphans > 0
+        ? { ok: true, version: pkg.version, degraded: "repos_without_org", count: orphans }
+        : { ok: true, version: pkg.version },
+    );
+  });
 
   // Developer one-liner: curl -fsSL <url>/install.sh | bash -s -- --api-key …
   // The script is templated with this deployment's public URL so devs never
@@ -59,6 +78,7 @@ export function createApp(
   }
   registerMemoryRoutes(api, auth); // #15 frontend read API
   registerRepoRoutes(api, auth); // #22 repo selector
+  registerOrgRoutes(api, auth); // #50 per-org admin: members, keys, repos
   registerCliAuthRoutes(api, auth); // browser login for aznex-worker setup
   registerAdminRoutes(api, auth); // env-var RBAC: repo onboarding
   registerKeyRoutes(api, auth); // self-service API key management

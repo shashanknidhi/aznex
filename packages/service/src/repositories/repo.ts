@@ -11,6 +11,7 @@ interface RepoRow {
   canonical: string;
   github_repo_id: string;
   github_installation_id: number;
+  org_id: string | null;
   status: string;
   metadata: string;
   created_at_epoch: number;
@@ -24,6 +25,7 @@ function mapRow(row: RepoRow): Repo {
     canonical: row.canonical,
     github_repo_id: row.github_repo_id,
     github_installation_id: row.github_installation_id,
+    org_id: row.org_id,
     status: row.status,
     metadata: parseJsonObject(row.metadata),
     created_at_epoch: row.created_at_epoch,
@@ -41,9 +43,9 @@ export class RepoRepository implements IRepoRepository {
     const now = Date.now();
     const id = randomUUID();
     this.db.prepare(`
-      INSERT INTO repo (id, fingerprint, canonical, github_repo_id, github_installation_id, status, metadata, created_at_epoch, updated_at_epoch)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(id, data.fingerprint, data.canonical, data.github_repo_id, data.github_installation_id, data.status, stringifyJson(data.metadata), now, now);
+      INSERT INTO repo (id, fingerprint, canonical, github_repo_id, github_installation_id, org_id, status, metadata, created_at_epoch, updated_at_epoch)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(id, data.fingerprint, data.canonical, data.github_repo_id, data.github_installation_id, data.org_id, data.status, stringifyJson(data.metadata), now, now);
     return this.getById(id)!;
   }
 
@@ -69,10 +71,19 @@ export class RepoRepository implements IRepoRepository {
     const now = Date.now();
     const next = CreateRepoSchema.parse({ ...existing, ...input });
     this.db.prepare(`
-      UPDATE repo SET fingerprint = ?, canonical = ?, github_repo_id = ?, github_installation_id = ?, status = ?, metadata = ?, updated_at_epoch = ?
+      UPDATE repo SET fingerprint = ?, canonical = ?, github_repo_id = ?, github_installation_id = ?, org_id = ?, status = ?, metadata = ?, updated_at_epoch = ?
       WHERE id = ?
-    `).run(next.fingerprint, next.canonical, next.github_repo_id, next.github_installation_id, next.status, stringifyJson(next.metadata), now, id);
+    `).run(next.fingerprint, next.canonical, next.github_repo_id, next.github_installation_id, next.org_id, next.status, stringifyJson(next.metadata), now, id);
     return this.getById(id);
+  }
+
+  listByOrgs(orgIds: string[], limit = 500): Repo[] {
+    if (orgIds.length === 0) return [];
+    const placeholders = orgIds.map(() => '?').join(', ');
+    const rows = this.db
+      .prepare(`SELECT * FROM repo WHERE org_id IN (${placeholders}) ORDER BY created_at_epoch DESC LIMIT ?`)
+      .all(...orgIds, limit) as RepoRow[];
+    return rows.map(mapRow);
   }
 
   list(limit = 100): Repo[] {
