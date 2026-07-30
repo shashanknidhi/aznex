@@ -10,6 +10,39 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning is [SemVer](https://semver.org/spec/v2.0.0.html). Pre-1.0, minor
 bumps stay at `0.1.x` and patch numbers carry both features and fixes.
 
+## [0.1.12] — 2026-07-30
+
+### Added
+
+- **Organizations — one deployment now hosts several companies.** An `org` owns
+  repos and members, so a pilot company's lead runs their own tenant instead of
+  waiting on a server config change. Three roles: a **super admin** (from
+  `AZNEX_ADMIN_GITHUB_LOGINS`) creates orgs and appoints their admins; an **org
+  admin** manages everything inside their own org — members, those members' API
+  keys, repos, and deleting any memory in the org; an **org member** reads and
+  writes their org's repos they have GitHub access to. Super admins can manage
+  every org but cannot read any org's memory through the API.
+- **Self-service member management** — org admins add teammates by GitHub
+  username in the viewer, including people who have never signed in. Removing
+  someone cuts their access on the next request; the memories they captured stay
+  with the team.
+- **Suspend an org** — stops all of its capture, MCP reads and viewer access
+  immediately, leaving its data in place. Resuming restores everything.
+
+### Changed
+
+- **Access is now gated twice on every request**: membership in the repo's
+  organization, *and* the existing GitHub collaborator check. Previously GitHub
+  alone decided, which meant removing someone from a team changed nothing — the
+  git host still called them a collaborator, so their worker kept capturing.
+- `@aznex/shared`: `RepoSchema` gains `org_id` (the owning organization).
+
+### Removed
+
+- **`AZNEX_ALLOWED_GITHUB_LOGINS`** — sign-in required editing a deployment
+  environment variable and redeploying for every new person. Membership in an
+  organization is the credential now, and org admins grant it themselves.
+
 ## [0.1.11] — 2026-07-28
 
 ### Added
@@ -186,6 +219,7 @@ First published release — the Phase 1 MVP, end to end.
   — frontend tests and build, Docker image job, lockfile fix (#46); Railway
   deployment with same-origin SPA and admin onboarding CLI (#43).
 
+[0.1.12]: https://github.com/shashanknidhi/aznex/releases/tag/v0.1.12
 [0.1.11]: https://github.com/shashanknidhi/aznex/releases/tag/v0.1.11
 [0.1.10]: https://github.com/shashanknidhi/aznex/releases/tag/v0.1.10
 [0.1.9]: https://github.com/shashanknidhi/aznex/releases/tag/v0.1.9
