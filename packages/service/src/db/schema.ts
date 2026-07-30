@@ -2,6 +2,11 @@ import { Database } from 'bun:sqlite';
 
 const initializedDatabases = new WeakSet<Database>();
 
+export function hasColumn(db: Database, table: string, column: string): boolean {
+  const rows = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+  return rows.some((r) => r.name === column);
+}
+
 export function ensureSchema(db: Database): void {
   if (initializedDatabases.has(db)) return;
 
@@ -27,17 +32,42 @@ export function ensureSchema(db: Database): void {
       updated_at_epoch INTEGER NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS org (
+      id TEXT PRIMARY KEY,
+      slug TEXT NOT NULL UNIQUE,
+      name TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'suspended')),
+      metadata TEXT NOT NULL DEFAULT '{}',
+      created_at_epoch INTEGER NOT NULL,
+      updated_at_epoch INTEGER NOT NULL
+    );
+
+    -- Keyed by github_login, NOT user_id: an org admin invites people who have
+    -- never signed in. The login binds to a user row lazily on first login.
+    CREATE TABLE IF NOT EXISTS org_membership (
+      org_id TEXT NOT NULL,
+      github_login TEXT NOT NULL,
+      role TEXT NOT NULL CHECK(role IN ('admin', 'member')),
+      invited_by_login TEXT,
+      created_at_epoch INTEGER NOT NULL,
+      updated_at_epoch INTEGER NOT NULL,
+      PRIMARY KEY (org_id, github_login),
+      FOREIGN KEY(org_id) REFERENCES org(id) ON DELETE CASCADE
+    );
+
     CREATE TABLE IF NOT EXISTS repo (
       id TEXT PRIMARY KEY,
       fingerprint TEXT NOT NULL UNIQUE,
       canonical TEXT NOT NULL,
       github_repo_id TEXT NOT NULL UNIQUE,
       github_installation_id INTEGER NOT NULL,
+      org_id TEXT,
       status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'inactive')),
       metadata TEXT NOT NULL DEFAULT '{}',
       created_at_epoch INTEGER NOT NULL,
       updated_at_epoch INTEGER NOT NULL,
-      FOREIGN KEY(github_installation_id) REFERENCES github_installation(installation_id)
+      FOREIGN KEY(github_installation_id) REFERENCES github_installation(installation_id),
+      FOREIGN KEY(org_id) REFERENCES org(id)
     );
 
     CREATE TABLE IF NOT EXISTS repo_member (
@@ -137,6 +167,14 @@ export function ensureSchema(db: Database): void {
   db.run('CREATE INDEX IF NOT EXISTS idx_memory_type ON memory(kind, type)');
 
   db.run('CREATE INDEX IF NOT EXISTS idx_memory_anchor_path ON memory_anchor(path)');
+
+  db.run('CREATE INDEX IF NOT EXISTS idx_org_membership_login ON org_membership(github_login)');
+  // A database created before the org migration has a `repo` table without
+  // org_id — CREATE TABLE IF NOT EXISTS above left it alone, and the index
+  // below would fail. Add the column here so ensureSchema is self-healing;
+  // migration v3 owns the backfill.
+  if (!hasColumn(db, 'repo', 'org_id')) db.run('ALTER TABLE repo ADD COLUMN org_id TEXT');
+  db.run('CREATE INDEX IF NOT EXISTS idx_repo_org ON repo(org_id)');
 
   db.run('CREATE INDEX IF NOT EXISTS idx_api_key_user ON api_key(user_id)');
   db.run('CREATE INDEX IF NOT EXISTS idx_api_key_prefix ON api_key(prefix)');

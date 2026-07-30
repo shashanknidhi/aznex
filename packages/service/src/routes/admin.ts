@@ -1,119 +1,105 @@
 import { z } from "zod";
 import type { Hono } from "hono";
 import type { AppEnv } from "../app.js";
-import { loadConfig } from "../config.js";
+import { GithubLoginSchema, OrgSlugSchema, OrgStatusSchema } from "@aznex/shared";
 import { sessionOrApiKeyAuth, type Auth } from "../auth/session.js";
-import { isAdminGithubLogin } from "../middleware/auth.js";
-import {
-  resolveRepoInstallation,
-  listInstallationRepos,
-  verifyRepoAccess,
-} from "../auth/repo-access.js";
-import { addRepo } from "../admin-cli.js";
+import { superAdminOnly } from "../middleware/org.js";
+import { OrgRepository } from "../repositories/org.js";
 import { RepoRepository } from "../repositories/repo.js";
-import type { MiddlewareHandler } from "hono";
+import { addOrg } from "../admin-cli.js";
 
-// Admin surface (env-var RBAC): AZNEX_ADMIN_GITHUB_LOGINS lists the GitHub
-// users who may onboard/de-board repos from the web UI. Every onboarding also
-// requires the caller to have GitHub access to the repo itself — being an
-// aznex admin doesn't grant reach into repos GitHub says you can't see.
+// Super admin surface (env RBAC via AZNEX_ADMIN_GITHUB_LOGINS): create orgs,
+// appoint org admins, suspend a tenant. Deliberately NOT a data surface —
+// reading a tenant's memory still requires org membership plus GitHub access
+// (see auth/authorize.ts). Deleting a memory is the one exception, for leak
+// response, and lives in routes/memories.ts.
+//
+// Repo and member onboarding is not here: that is the org admin's job
+// (routes/orgs.ts), which a super admin can also perform through the same
+// routes because the org guards accept them.
 
-function adminOnly(): MiddlewareHandler<AppEnv> {
-  return async (c, next) => {
-    if (!isAdminGithubLogin(c.get("user").github_login)) {
-      return c.json({ error: "admin_only" }, 403);
-    }
-    await next();
-  };
-}
-
-const AddRepoBody = z.object({
-  fingerprint: z
-    .string()
-    .min(1)
-    .regex(/^[^/\s]+\/[^/\s]+\/[^/\s]+$/, "expected host/owner/name"),
+const CreateOrgBody = z.object({
+  slug: OrgSlugSchema,
+  name: z.string().min(1).max(120),
+  admin_logins: z.array(GithubLoginSchema).min(1),
 });
 
-const SyncBody = z.object({ installation_id: z.number().int().positive() });
+const UpdateOrgBody = z
+  .object({ name: z.string().min(1).max(120).optional(), status: OrgStatusSchema.optional() })
+  .refine((b) => b.name !== undefined || b.status !== undefined, "nothing to update");
 
-const RemoveBody = z.object({ fingerprint: z.string().min(1) });
-
-async function callerCanAccess(
-  c: { get: (k: "user" | "db") => any },
-  canonical: string,
-  installationId: number,
-): Promise<boolean> {
-  const access = await verifyRepoAccess({
-    user: c.get("user"),
-    // verifyRepoAccess only reads canonical + installation id from the repo.
-    repo: { canonical, github_installation_id: installationId } as any,
-    config: loadConfig(),
-  }).catch(() => ({ allowed: false }));
-  return access.allowed;
-}
+const AdminBody = z.object({ github_login: GithubLoginSchema });
 
 export function registerAdminRoutes(app: Hono<AppEnv>, auth: Auth | null): void {
-  // Onboard one repo by name; ids resolved via the GitHub App.
-  app.post("/admin/repos", sessionOrApiKeyAuth(auth), adminOnly(), async (c) => {
-    const parsed = AddRepoBody.safeParse(await c.req.json().catch(() => null));
-    if (!parsed.success) return c.json({ error: "invalid_request" }, 400);
-    // Convention (schemas/repo.ts): lowercase host+owner, preserve repo-name case
-    const [host, owner, ...name] = parsed.data.fingerprint.split("/");
-    const fingerprint = `${host!.toLowerCase()}/${owner!.toLowerCase()}/${name.join("/")}`;
-    const canonical = fingerprint.split("/").slice(1).join("/");
+  const guards = [sessionOrApiKeyAuth(auth), superAdminOnly()] as const;
 
-    try {
-      const { githubRepoId, installationId } = await resolveRepoInstallation(canonical, loadConfig());
-      if (!(await callerCanAccess(c, canonical, installationId))) {
-        return c.json({ error: "you_do_not_have_access_to_this_repo" }, 403);
-      }
-      const repo = addRepo(c.get("db"), { fingerprint, githubRepoId, installationId });
-      return c.json({ fingerprint: repo.fingerprint, canonical: repo.canonical }, 201);
-    } catch (err) {
-      return c.json({ error: err instanceof Error ? err.message : "onboarding_failed" }, 400);
+  app.post("/admin/orgs", ...guards, async (c) => {
+    const parsed = CreateOrgBody.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: "invalid_request" }, 400);
+    const db = c.get("db");
+    if (new OrgRepository(db).getBySlug(parsed.data.slug)) {
+      return c.json({ error: "slug_taken" }, 409);
     }
+    const org = addOrg(db, {
+      slug: parsed.data.slug,
+      name: parsed.data.name,
+      adminLogins: parsed.data.admin_logins,
+    });
+    return c.json({ id: org.id, slug: org.slug, name: org.name, status: org.status }, 201);
   });
 
-  // GitHub App post-install callback support: onboard every repo the owner
-  // selected on GitHub's install page — filtered to repos the caller can
-  // actually access (installation ids are guessable; caller access is the gate).
-  app.post("/admin/installations/sync", sessionOrApiKeyAuth(auth), adminOnly(), async (c) => {
-    const parsed = SyncBody.safeParse(await c.req.json().catch(() => null));
-    if (!parsed.success) return c.json({ error: "invalid_request" }, 400);
-
-    try {
-      const repos = await listInstallationRepos(parsed.data.installation_id, loadConfig());
-      const onboarded: string[] = [];
-      const skipped: string[] = [];
-      for (const r of repos) {
-        if (await callerCanAccess(c, r.canonical, parsed.data.installation_id)) {
-          const [o, n] = r.canonical.split("/");
-          const fingerprint = `github.com/${o!.toLowerCase()}/${n}`;
-          addRepo(c.get("db"), {
-            fingerprint,
-            githubRepoId: r.githubRepoId,
-            installationId: parsed.data.installation_id,
-          });
-          onboarded.push(fingerprint);
-        } else {
-          skipped.push(r.canonical);
-        }
-      }
-      return c.json({ onboarded, skipped });
-    } catch (err) {
-      return c.json({ error: err instanceof Error ? err.message : "sync_failed" }, 400);
-    }
+  app.get("/admin/orgs", ...guards, (c) => {
+    const db = c.get("db");
+    const orgs = new OrgRepository(db);
+    const repos = new RepoRepository(db);
+    return c.json({
+      orgs: orgs.list().map((org) => ({
+        id: org.id,
+        slug: org.slug,
+        name: org.name,
+        status: org.status,
+        member_count: orgs.listMembers(org.id).length,
+        repo_count: repos.listByOrgs([org.id]).filter((r) => r.status === "active").length,
+        created_at_epoch: org.created_at_epoch,
+      })),
+    });
   });
 
-  // De-board: soft-deactivate. Memories are preserved; reads/writes reject the
-  // repo until it's onboarded again (which reactivates it).
-  app.delete("/admin/repos", sessionOrApiKeyAuth(auth), adminOnly(), async (c) => {
-    const parsed = RemoveBody.safeParse(await c.req.json().catch(() => null));
+  // Rename, suspend, or resume. Suspension takes effect on the next request:
+  // authorizeRepo rejects every repo of a non-active org, so the tenant's
+  // ingest, MCP and reads all stop while their data stays put.
+  app.patch("/admin/orgs/:orgId", ...guards, async (c) => {
+    const parsed = UpdateOrgBody.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: "invalid_request" }, 400);
-    const repos = new RepoRepository(c.get("db"));
-    const repo = repos.getByFingerprint(parsed.data.fingerprint);
-    if (!repo) return c.json({ error: "unknown_repo" }, 404);
-    repos.update(repo.id, { status: "inactive" });
-    return c.json({ fingerprint: repo.fingerprint, status: "inactive" });
+    const orgs = new OrgRepository(c.get("db"));
+    if (!orgs.getById(c.req.param("orgId"))) return c.json({ error: "not_found" }, 404);
+    const updated = orgs.update(c.req.param("orgId"), parsed.data);
+    return c.json({ id: updated!.id, slug: updated!.slug, name: updated!.name, status: updated!.status });
+  });
+
+  app.post("/admin/orgs/:orgId/admins", ...guards, async (c) => {
+    const parsed = AdminBody.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: "invalid_request" }, 400);
+    const orgs = new OrgRepository(c.get("db"));
+    const org = orgs.getById(c.req.param("orgId"));
+    if (!org) return c.json({ error: "not_found" }, 404);
+    const member = orgs.setMember(org.id, parsed.data.github_login, "admin", c.get("user").github_login);
+    return c.json({ github_login: member.github_login, role: member.role }, 201);
+  });
+
+  // Demote, not delete: a super admin removing the org's last admin would leave
+  // the tenant unmanageable, so this drops them to member and refuses the last one.
+  app.delete("/admin/orgs/:orgId/admins", ...guards, async (c) => {
+    const parsed = AdminBody.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: "invalid_request" }, 400);
+    const orgs = new OrgRepository(c.get("db"));
+    const org = orgs.getById(c.req.param("orgId"));
+    if (!org) return c.json({ error: "not_found" }, 404);
+    if (orgs.roleFor(org.id, parsed.data.github_login) !== "admin") {
+      return c.json({ error: "not_an_admin" }, 404);
+    }
+    if (orgs.countAdmins(org.id) <= 1) return c.json({ error: "last_admin" }, 409);
+    const member = orgs.setMember(org.id, parsed.data.github_login, "member");
+    return c.json({ github_login: member.github_login, role: member.role });
   });
 }

@@ -2,9 +2,8 @@ import type { Hono } from "hono";
 import type { AppEnv } from "../app.js";
 import { loadConfig } from "../config.js";
 import { sessionOrApiKeyAuth, type Auth } from "../auth/session.js";
-import { isAdminGithubLogin } from "../middleware/auth.js";
-import { verifyRepoAccess } from "../auth/repo-access.js";
-import { RepoRepository } from "../repositories/repo.js";
+import { isSuperAdmin } from "../middleware/auth.js";
+import { authorizeRepo, isDenial } from "../auth/authorize.js";
 import { MemoryRepository } from "../repositories/memory.js";
 import { MemoryAnchorRepository } from "../repositories/memory-anchor.js";
 import { UserRepository } from "../repositories/user.js";
@@ -33,12 +32,10 @@ export function registerMemoryRoutes(app: Hono<AppEnv>, auth: Auth | null): void
     const q = c.req.query("q")?.trim();
 
     const db = c.get("db");
-    const repo = new RepoRepository(db).getActiveByFingerprint(fingerprint);
-    if (!repo) return c.json({ error: "unknown_repo" }, 403);
-    const access = await verifyRepoAccess({ user: c.get("user"), repo, config: loadConfig() });
-    if (!access.allowed) return c.json({ error: "forbidden" }, 403);
-
     const user = c.get("user");
+    const auth = await authorizeRepo({ db, user, fingerprint, config: loadConfig() });
+    if (isDenial(auth)) return c.json({ error: auth }, 403);
+
     const memories = new MemoryRepository(db);
     const offset = (page - 1) * PAGE_SIZE;
     const [items, total] = q
@@ -60,10 +57,8 @@ export function registerMemoryRoutes(app: Hono<AppEnv>, auth: Auth | null): void
     const limit = Math.min(Math.max(1, Number(c.req.query("limit") ?? 10) || 10), 50);
 
     const db = c.get("db");
-    const repo = new RepoRepository(db).getActiveByFingerprint(fingerprint);
-    if (!repo) return c.json({ error: "unknown_repo" }, 403);
-    const access = await verifyRepoAccess({ user: c.get("user"), repo, config: loadConfig() });
-    if (!access.allowed) return c.json({ error: "forbidden" }, 403);
+    const auth = await authorizeRepo({ db, user: c.get("user"), fingerprint, config: loadConfig() });
+    if (isDenial(auth)) return c.json({ error: auth }, 403);
 
     const items = new MemoryRepository(db).listByRepo(fingerprint, limit);
     return c.json({ items: items.map((m) => ({ id: m.id, type: m.type, content: m.content })) });
@@ -77,10 +72,8 @@ export function registerMemoryRoutes(app: Hono<AppEnv>, auth: Auth | null): void
     if (!fingerprint || !path) return c.json({ error: "repo_fingerprint and path required" }, 400);
 
     const db = c.get("db");
-    const repo = new RepoRepository(db).getActiveByFingerprint(fingerprint);
-    if (!repo) return c.json({ error: "unknown_repo" }, 403);
-    const access = await verifyRepoAccess({ user: c.get("user"), repo, config: loadConfig() });
-    if (!access.allowed) return c.json({ error: "forbidden" }, 403);
+    const auth = await authorizeRepo({ db, user: c.get("user"), fingerprint, config: loadConfig() });
+    if (isDenial(auth)) return c.json({ error: auth }, 403);
 
     const memories = new MemoryRepository(db);
     const items = new MemoryAnchorRepository(db)
@@ -94,10 +87,13 @@ export function registerMemoryRoutes(app: Hono<AppEnv>, auth: Auth | null): void
     const db = c.get("db");
     const memory = new MemoryRepository(db).getById(c.req.param("id"));
     if (!memory) return c.json({ error: "not_found" }, 404);
-    const repo = new RepoRepository(db).getActiveByFingerprint(memory.repo_fingerprint);
-    if (!repo) return c.json({ error: "not_found" }, 404);
-    const access = await verifyRepoAccess({ user: c.get("user"), repo, config: loadConfig() });
-    if (!access.allowed) return c.json({ error: "forbidden" }, 403);
+    const auth = await authorizeRepo({
+      db,
+      user: c.get("user"),
+      fingerprint: memory.repo_fingerprint,
+      config: loadConfig(),
+    });
+    if (isDenial(auth)) return c.json({ error: auth === "unknown_repo" ? "not_found" : "forbidden" }, auth === "unknown_repo" ? 404 : 403);
 
     const anchors = new MemoryAnchorRepository(db).listByMemory(memory.id);
     return c.json({
@@ -110,15 +106,31 @@ export function registerMemoryRoutes(app: Hono<AppEnv>, auth: Auth | null): void
 
   // Deletion is the only way to withdraw a memory — the safety valve for one
   // that is wrong, misleading, or leaked something past the secret scanners.
+  //
+  // Author, the org's admins, or a super admin. The super-admin path skips
+  // authorizeRepo deliberately: incident response must work on any tenant's
+  // leaked secret, and deleting is not reading. Everyone else must still hold
+  // live access to the repo — losing org membership loses the ability to delete.
   app.delete("/memories/:id", sessionOrApiKeyAuth(auth), async (c) => {
     const db = c.get("db");
     const user = c.get("user");
     const memories = new MemoryRepository(db);
     const memory = memories.getById(c.req.param("id"));
     if (!memory) return c.json({ error: "not_found" }, 404);
-    if (memory.author_id !== user.id && !isAdminGithubLogin(user.github_login)) {
-      return c.json({ error: "author_or_admin_only" }, 403);
+
+    if (!isSuperAdmin(user.github_login)) {
+      const repoAuth = await authorizeRepo({
+        db,
+        user,
+        fingerprint: memory.repo_fingerprint,
+        config: loadConfig(),
+      });
+      if (isDenial(repoAuth)) return c.json({ error: "forbidden" }, 403);
+      if (repoAuth.role !== "admin" && memory.author_id !== user.id) {
+        return c.json({ error: "author_or_org_admin_only" }, 403);
+      }
     }
+
     memories.delete(memory.id);
     return c.json({ id: memory.id, deleted: true });
   });

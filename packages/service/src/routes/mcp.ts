@@ -14,8 +14,7 @@ import {
 import type { AppEnv } from "../app.js";
 import { loadConfig } from "../config.js";
 import { apiKeyAuth } from "../middleware/auth.js";
-import { verifyRepoAccess } from "../auth/repo-access.js";
-import { RepoRepository } from "../repositories/repo.js";
+import { authorizeRepo, isDenial } from "../auth/authorize.js";
 import { MemoryRepository } from "../repositories/memory.js";
 import { MemoryAnchorRepository } from "../repositories/memory-anchor.js";
 import { SessionRepository } from "../repositories/session.js";
@@ -25,13 +24,12 @@ import pkg from "../../package.json" with { type: "json" };
 // query team memory. Stateless transport — every POST carries a full JSON-RPC
 // exchange, so no session bookkeeping server-side.
 
-// Repo access is the only gate: every memory captured against a repo is shared
-// with everyone who can see that repo.
+// Access is the only gate: every memory captured against a repo is shared with
+// everyone in its org who can see that repo. Returns the denial reason, or null
+// when allowed. See auth/authorize.ts for the two conditions.
 async function checkRepoAccess(db: Database, user: User, fingerprint: string): Promise<string | null> {
-  const repo = new RepoRepository(db).getActiveByFingerprint(fingerprint);
-  if (!repo) return "unknown_repo";
-  const access = await verifyRepoAccess({ user, repo, config: loadConfig() });
-  return access.allowed ? null : "forbidden";
+  const auth = await authorizeRepo({ db, user, fingerprint, config: loadConfig() });
+  return isDenial(auth) ? auth : null;
 }
 
 function toolError(message: string) {

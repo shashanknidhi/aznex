@@ -8,6 +8,8 @@ import { RepoRepository } from "../repositories/repo.js";
 import { MemoryRepository } from "../repositories/memory.js";
 import { UserRepository } from "../repositories/user.js";
 import { clearRepoAccessCache } from "./repo-access.js";
+import { seedOrg } from "../test-support.js";
+import { OrgRepository } from "../repositories/org.js";
 
 const FP = "github.com/acme/widget";
 const realFetch = globalThis.fetch;
@@ -39,9 +41,10 @@ async function seed() {
   new GithubInstallationRepository(db).create({
     installation_id: 42, account_type: "org", account_login: "acme", metadata: {},
   });
+  const orgId = seedOrg(db, { alice: "member", mallory: "member", seeder: "member" });
   new RepoRepository(db).create({
     fingerprint: FP, canonical: "acme/widget",
-    github_repo_id: "9001", github_installation_id: 42, status: "active", metadata: {},
+    github_repo_id: "9001", github_installation_id: 42, org_id: orgId, status: "active", metadata: {},
   });
   const seedUser = new UserRepository(db).create({
     github_id: "999", github_login: "seeder", display_name: "Seeder", avatar_url: null, metadata: {},
@@ -92,8 +95,9 @@ test("/api/repos lists only repos the session user can access", async () => {
   const res = await app.request("/api/repos", { headers: { Cookie: cookie } });
   expect(res.status).toBe(200);
   const body = (await res.json()) as any;
-  expect(body.repos).toEqual([{ fingerprint: FP, canonical: "acme/widget" }]);
+  expect(body.repos).toEqual([{ fingerprint: FP, canonical: "acme/widget", org_id: expect.any(String) }]);
   expect(body.user.login).toBe("alice");
+  expect(body.orgs.map((o: any) => o.slug)).toEqual(["acme"]);
 });
 
 test("no cookie and no bearer token → 401", async () => {
@@ -102,18 +106,15 @@ test("no cookie and no bearer token → 401", async () => {
   expect((await app.request(`/api/memories?repo_fingerprint=${FP}`)).status).toBe(401);
 });
 
-test("allowlist blocks non-listed users on both session and bearer paths", async () => {
-  const { app } = await seed();
+// The env allowlist is gone: org membership is the sign-in credential now, so
+// an org admin removing someone locks them out without a redeploy.
+test("a login with no org membership cannot hold a session", async () => {
+  const { db, app } = await seed();
   const cookie = await signUpAndGetCookie(app); // github_login "alice"
-  process.env["AZNEX_ALLOWED_GITHUB_LOGINS"] = "someone-else";
-  try {
-    const viaSession = await app.request("/api/repos", { headers: { Cookie: cookie } });
-    expect(viaSession.status).toBe(403);
-    expect(((await viaSession.json()) as any).error).toBe("github_login_not_allowed");
+  expect((await app.request("/api/repos", { headers: { Cookie: cookie } })).status).toBe(200);
 
-    process.env["AZNEX_ALLOWED_GITHUB_LOGINS"] = "alice";
-    expect((await app.request("/api/repos", { headers: { Cookie: cookie } })).status).toBe(200);
-  } finally {
-    delete process.env["AZNEX_ALLOWED_GITHUB_LOGINS"];
-  }
+  new OrgRepository(db).removeMember(new OrgRepository(db).getBySlug("acme")!.id, "alice");
+  const after = await app.request("/api/repos", { headers: { Cookie: cookie } });
+  expect(after.status).toBe(403);
+  expect(((await after.json()) as any).error).toBe("github_login_not_allowed");
 });

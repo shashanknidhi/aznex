@@ -10,6 +10,8 @@ import { MemoryRepository } from "../repositories/memory.js";
 import { MemoryAnchorRepository } from "../repositories/memory-anchor.js";
 import { hashToken } from "../middleware/auth.js";
 import { clearRepoAccessCache } from "../auth/repo-access.js";
+import { seedOrg } from "../test-support.js";
+import { OrgRepository } from "../repositories/org.js";
 
 const TOKEN = "read-token";
 const FP = "github.com/acme/widget";
@@ -39,9 +41,10 @@ function seed(memoryCount = 3) {
   new GithubInstallationRepository(db).create({
     installation_id: 42, account_type: "org", account_login: "acme", metadata: {},
   });
+  const orgId = seedOrg(db, { alice: "member", mallory: "member" });
   new RepoRepository(db).create({
     fingerprint: FP, canonical: "acme/widget",
-    github_repo_id: "9001", github_installation_id: 42, status: "active", metadata: {},
+    github_repo_id: "9001", github_installation_id: 42, org_id: orgId, status: "active", metadata: {},
   });
 
   const memories = new MemoryRepository(db);
@@ -207,4 +210,51 @@ test("deleting a teammate's memory → 403; unknown id → 404", async () => {
   expect((await del(app, "/api/memories/mem_mallory")).status).toBe(403);
   expect(new MemoryRepository(db).getById("mem_mallory")).not.toBeNull();
   expect((await del(app, "/api/memories/nope")).status).toBe(404);
+});
+
+// The org admin is the one who can withdraw a wrong or leaked memory from their
+// own repo. Before orgs existed only the author or the global operator could.
+test("an org admin deletes any memory in their org", async () => {
+  const { db, app } = seed();
+  const orgId = new OrgRepository(db).getBySlug("acme")!.id;
+  new OrgRepository(db).setMember(orgId, "alice", "admin");
+  expect((await del(app, "/api/memories/mem_mallory")).status).toBe(200);
+  expect(new MemoryRepository(db).getById("mem_mallory")).toBeNull();
+});
+
+// Super admin is manage-only for reads, but must still be able to respond to a
+// leak in any tenant — deleting is not reading.
+test("a super admin deletes across orgs but cannot read them", async () => {
+  const { db, app } = seed();
+  new UserRepository(db).create({
+    github_id: "9", github_login: "root", display_name: "Root", avatar_url: null, metadata: {},
+  });
+  const rootUser = new UserRepository(db).getByGithubLogin("root")!;
+  new ApiKeyRepository(db).create({
+    user_id: rootUser.id, name: "k", key_hash: hashToken("root-token"), prefix: "axk_",
+    scopes: [], status: "active", last_used_at_epoch: null, expires_at_epoch: null, metadata: {},
+  });
+  process.env["AZNEX_ADMIN_GITHUB_LOGINS"] = "root";
+  try {
+    // Not a member of acme, so the read path denies them.
+    const read = await get(app, `/api/memories?repo_fingerprint=${encodeURIComponent(FP)}`, "root-token");
+    expect(read.status).toBe(403);
+    // Deletion still works, for leak response.
+    expect((await del(app, "/api/memories/mem_mallory", "root-token")).status).toBe(200);
+    expect(new MemoryRepository(db).getById("mem_mallory")).toBeNull();
+  } finally {
+    delete process.env["AZNEX_ADMIN_GITHUB_LOGINS"];
+  }
+});
+
+test("losing org membership revokes reads and the ability to delete own memories", async () => {
+  const { db, app } = seed();
+  const orgs = new OrgRepository(db);
+  orgs.removeMember(orgs.getBySlug("acme")!.id, "alice");
+  clearRepoAccessCache();
+  // Still a GitHub collaborator (the stub always says 204) — the org gate is
+  // what stops them.
+  expect((await get(app, `/api/memories?repo_fingerprint=${encodeURIComponent(FP)}`)).status).toBe(403);
+  expect((await del(app, "/api/memories/mem_1")).status).toBe(403);
+  expect(new MemoryRepository(db).getById("mem_1")).not.toBeNull();
 });

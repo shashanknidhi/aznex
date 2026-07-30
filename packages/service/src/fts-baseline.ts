@@ -36,7 +36,8 @@ const now = Date.now();
 
 const user = users.create({ github_id: '1', github_login: 'dev', display_name: 'Dev', avatar_url: null, metadata: {} });
 installations.create({ installation_id: 1, account_type: 'org', account_login: 'acme', metadata: {} });
-repos.create({ fingerprint: FP, canonical: 'acme/api', github_repo_id: '1', github_installation_id: 1, status: 'active', metadata: {} });
+// org_id is irrelevant here: this script measures FTS5 recall, never authorization.
+repos.create({ fingerprint: FP, canonical: 'acme/api', github_repo_id: '1', github_installation_id: 1, org_id: null, status: 'active', metadata: {} });
 const sess = sessions.create({ id: 'sess_1', repo_fingerprint: FP, repo_canonical: 'acme/api', author_id: user.id, agent: 'claude-code', platform_source: 'claude-code', status: 'active', metadata: {}, started_at_epoch: now, ended_at_epoch: null });
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

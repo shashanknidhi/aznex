@@ -1,6 +1,7 @@
 import type {
   User, CreateUser,
   GithubInstallation, CreateGithubInstallation,
+  Org, CreateOrg, OrgMembership, OrgRole,
   Repo, CreateRepo,
   RepoMember,
   ApiKey, CreateApiKey,
@@ -14,6 +15,7 @@ export interface IUserRepository {
   create(input: CreateUser): User;
   getById(id: string): User | null;
   getByGithubId(githubId: string): User | null;
+  getByGithubLogin(login: string): User | null;
   update(id: string, input: Partial<CreateUser>): User | null;
 }
 
@@ -24,12 +26,28 @@ export interface IGithubInstallationRepository {
   update(id: string, input: Partial<CreateGithubInstallation>): GithubInstallation | null;
 }
 
+export interface IOrgRepository {
+  create(input: CreateOrg): Org;
+  getById(id: string): Org | null;
+  getBySlug(slug: string): Org | null;
+  list(limit?: number): Org[];
+  update(id: string, input: Partial<CreateOrg>): Org | null;
+  setMember(orgId: string, login: string, role: OrgRole, invitedByLogin?: string | null): OrgMembership;
+  getMember(orgId: string, login: string): OrgMembership | null;
+  roleFor(orgId: string, login: string): OrgRole | null;
+  listMembers(orgId: string): OrgMembership[];
+  countAdmins(orgId: string): number;
+  removeMember(orgId: string, login: string): void;
+  listActiveForLogin(login: string): { org: Org; role: OrgRole }[];
+}
+
 export interface IRepoRepository {
   create(input: CreateRepo): Repo;
   getById(id: string): Repo | null;
   getByFingerprint(fingerprint: string): Repo | null;
   getActiveByFingerprint(fingerprint: string): Repo | null;
   update(id: string, input: Partial<CreateRepo>): Repo | null;
+  listByOrgs(orgIds: string[], limit?: number): Repo[];
   list(limit?: number): Repo[];
 }
 

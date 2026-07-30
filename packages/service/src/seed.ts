@@ -4,6 +4,7 @@ import { openDatabase } from './db/connection.js';
 import { UserRepository } from './repositories/user.js';
 import { GithubInstallationRepository } from './repositories/github-installation.js';
 import { RepoRepository } from './repositories/repo.js';
+import { OrgRepository } from './repositories/org.js';
 import { RepoMemberRepository } from './repositories/repo-member.js';
 import { ApiKeyRepository } from './repositories/api-key.js';
 import { SessionRepository } from './repositories/session.js';
@@ -17,6 +18,7 @@ console.log('DB path:', process.env['DATABASE_PATH'] ?? process.env['AZNEX_DB_PA
 const users = new UserRepository(db);
 const installations = new GithubInstallationRepository(db);
 const repos = new RepoRepository(db);
+const orgs = new OrgRepository(db);
 const members = new RepoMemberRepository(db);
 const apiKeys = new ApiKeyRepository(db);
 const sessions = new SessionRepository(db);
@@ -31,6 +33,14 @@ const alice = users.create({ github_id: '1001', github_login: 'alice', display_n
 const bob   = users.create({ github_id: '1002', github_login: 'bob',   display_name: 'Bob',   avatar_url: null, metadata: {} });
 console.log('Users:', alice.id, bob.id);
 
+// ── Org ───────────────────────────────────────────────────────────────────
+// Every repo needs an owning org, and both seed users need membership in it,
+// or nothing they own is readable.
+const org = orgs.create({ slug: 'acme-corp', name: 'Acme Corp', status: 'active', metadata: {} });
+orgs.setMember(org.id, 'alice', 'admin');
+orgs.setMember(org.id, 'bob', 'member');
+console.log('Org:', org.id, org.slug);
+
 // ── GitHub installation ───────────────────────────────────────────────────
 const install = installations.create({ installation_id: 42, account_type: 'org', account_login: 'acme-corp', metadata: {} });
 console.log('Installation:', install.id, 'installation_id=', install.installation_id);
@@ -41,6 +51,7 @@ const repo = repos.create({
   canonical: 'acme-corp/widget',
   github_repo_id: '9001',
   github_installation_id: 42,
+  org_id: org.id,
   status: 'active',
   metadata: {},
 });

@@ -3,7 +3,7 @@ import { betterAuth } from "better-auth";
 import { getMigrations } from "better-auth/db/migration";
 import type { MiddlewareHandler } from "hono";
 import type { AppEnv } from "../app.js";
-import { apiKeyAuth, githubLoginAllowed } from "../middleware/auth.js";
+import { apiKeyAuth, loginAllowed } from "../middleware/auth.js";
 import { UserRepository } from "../repositories/user.js";
 
 // Browser-session auth (#22): better-auth with GitHub OAuth, backed by the
@@ -81,7 +81,9 @@ export function sessionOrApiKeyAuth(auth: Auth | null): MiddlewareHandler<AppEnv
         avatar_url: session.user.image ?? null,
         metadata: {},
       });
-    if (!githubLoginAllowed(user.github_login)) {
+    // The aznex user row is created above before this gate runs, on purpose: an
+    // uninvited login still 403s, and the row is what a later org invite binds to.
+    if (!loginAllowed(db, user.github_login)) {
       return c.json({ error: "github_login_not_allowed" }, 403);
     }
     c.set("user", user);
