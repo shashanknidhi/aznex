@@ -17,13 +17,14 @@ import {
 } from "../components/ui.js";
 
 /**
- * Home: the repos you can read, grouped by the org that owns them.
+ * Home: the repos you can read in the one org selected in the header.
  *
- * Grouped because rights are per-org — you may be an admin in one and a reader
- * in another, and the available actions differ.
+ * Every org used to render stacked on this page. Rights are per-org — admin in
+ * one, reader in another — so the onboarding controls at the bottom belonged to
+ * whichever org happened to be last, which nothing on screen said.
  */
 export function RepoSelect() {
-  const { me, error: meError } = useMe();
+  const { me, error: meError, activeOrg } = useMe();
   const { confirm, dialog } = useConfirm();
   const [actionError, setActionError] = useState<unknown>(null);
   const [flash, setFlash] = useFlash();
@@ -64,8 +65,16 @@ export function RepoSelect() {
   }
 
   return (
-    <Shell title="Repositories">
-      <h1>Repositories</h1>
+    <Shell title={activeOrg ? activeOrg.name : "Repositories"}>
+      <h1>
+        {activeOrg ? (
+          <>
+            {activeOrg.name} <Badge>{activeOrg.role}</Badge>
+          </>
+        ) : (
+          "Repositories"
+        )}
+      </h1>
       <Flash message={flash} />
 
       {config.data?.github_app === false && (
@@ -92,14 +101,16 @@ export function RepoSelect() {
             />
           )}
 
-          {data!.orgs.map((org) => {
+          {(() => {
+            // `activeOrg` comes from /api/me, this list from /api/repos; if they
+            // disagree (an org was just left), fall back rather than blank out.
+            const org = data!.orgs.find((o) => o.id === activeOrg?.id) ?? data!.orgs[0];
+            if (!org) return null;
             const owned = data!.repos.filter((r) => r.org_id === org.id);
             const isAdmin = org.role === "admin";
             return (
               <section key={org.id}>
-                <h2>
-                  {org.name} <Badge>{org.role}</Badge>
-                </h2>
+                <h2>Repositories</h2>
 
                 {owned.length === 0 ? (
                   <Empty
@@ -148,7 +159,8 @@ export function RepoSelect() {
                           Pick repositories on GitHub →
                         </a>{" "}
                         <span className="muted">
-                          Select them there; GitHub sends you back and they onboard automatically.
+                          Select them there; GitHub sends you back and they onboard into {org.name}{" "}
+                          automatically.
                         </span>
                       </p>
                     ) : (
@@ -162,8 +174,9 @@ export function RepoSelect() {
                     )}
                     <OnboardRepoForm
                       orgId={org.id}
+                      orgName={org.name}
                       onAdded={(fingerprint) => {
-                        setFlash(`${fingerprint} onboarded`);
+                        setFlash(`${fingerprint} onboarded into ${org.name}`);
                         reload();
                       }}
                     />
@@ -171,7 +184,7 @@ export function RepoSelect() {
                 )}
               </section>
             );
-          })}
+          })()}
         </>
       )}
 
@@ -185,7 +198,15 @@ export function RepoSelect() {
 
 const FINGERPRINT = /^[^/\s]+\/[^/\s]+\/[^/\s]+$/;
 
-function OnboardRepoForm({ orgId, onAdded }: { orgId: string; onAdded: (fingerprint: string) => void }) {
+function OnboardRepoForm({
+  orgId,
+  orgName,
+  onAdded,
+}: {
+  orgId: string;
+  orgName: string;
+  onAdded: (fingerprint: string) => void;
+}) {
   const [fingerprint, setFingerprint] = useState("");
   const [error, setError] = useState<unknown>(null);
   const [hint, setHint] = useState<string | null>(null);
@@ -217,7 +238,7 @@ function OnboardRepoForm({ orgId, onAdded }: { orgId: string; onAdded: (fingerpr
     <>
       <form className="toolbar" onSubmit={submit}>
         <div className="field">
-          <label htmlFor={`onboard-${orgId}`}>Onboard a repository by name</label>
+          <label htmlFor={`onboard-${orgId}`}>Onboard a repository into {orgName}</label>
           <input
             id={`onboard-${orgId}`}
             required

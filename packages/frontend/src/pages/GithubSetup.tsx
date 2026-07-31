@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api, type OrgInfo, type SkippedRepo, type SyncResult } from "../api.js";
+import { useMe } from "../auth.js";
 import { Shell } from "../components/Shell.js";
 import { AsyncButton, Empty, ErrorNote, Loading, Note } from "../components/ui.js";
 
@@ -10,31 +11,41 @@ import { AsyncButton, Empty, ErrorNote, Loading, Note } from "../components/ui.j
  */
 export function GithubSetup() {
   const [params] = useSearchParams();
+  const { activeOrg, loading: meLoading } = useMe();
   const installationId = Number(params.get("installation_id"));
   const [result, setResult] = useState<SyncResult | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [invalid, setInvalid] = useState(false);
-  // GitHub tells us the installation, not which tenant owns it. One admin org is
-  // unambiguous; several means the admin has to choose.
+  // GitHub tells us the installation, not which tenant owns it. The org selected
+  // in the header answers that; only fall back to asking when it can't.
   const [adminOrgs, setAdminOrgs] = useState<OrgInfo[] | null>(null);
+  const [target, setTarget] = useState<OrgInfo | null>(null);
 
-  const sync = (orgId: string) =>
-    api.syncInstallation(orgId, installationId).then(setResult, (e: unknown) => setError(e));
+  const sync = (org: OrgInfo) => {
+    setTarget(org);
+    return api.syncInstallation(org.id, installationId).then(setResult, (e: unknown) => setError(e));
+  };
 
   useEffect(() => {
     if (!Number.isInteger(installationId) || installationId <= 0) {
       setInvalid(true);
       return;
     }
+    // Wait for /api/me, otherwise the active org reads as null and we'd ask a
+    // question the header has already answered.
+    if (meLoading) return;
     api.orgs().then(
       (r) => {
         const mine = r.orgs.filter((o) => o.role === "admin");
         setAdminOrgs(mine);
-        if (mine.length === 1) void sync(mine[0]!.id);
+        const chosen = mine.find((o) => o.id === activeOrg?.id) ?? (mine.length === 1 ? mine[0]! : null);
+        if (chosen) void sync(chosen);
       },
       (e: unknown) => setError(e),
     );
-  }, [installationId]);
+    // Switching orgs later must not fire a second sync.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [installationId, meLoading]);
 
   if (invalid) {
     return (
@@ -88,7 +99,7 @@ export function GithubSetup() {
             <li key={o.id} className="row">
               <span>{o.name}</span>
               <div className="row-actions">
-                <AsyncButton className="btn btn-sm" onClick={() => sync(o.id)} busyLabel="Onboarding…">
+                <AsyncButton className="btn btn-sm" onClick={() => sync(o)} busyLabel="Onboarding…">
                   Onboard here
                 </AsyncButton>
               </div>
@@ -113,6 +124,12 @@ export function GithubSetup() {
   return (
     <Shell title="GitHub setup" crumbs={[["Repositories", "/"], ["GitHub setup", null]]}>
       <h1>GitHub App installation synced</h1>
+      {target && (
+        <p className="muted">
+          Onboarded into <strong>{target.name}</strong>. Wrong organization? Switch it in the header
+          and open the install link again.
+        </p>
+      )}
 
       {nothingHappened && (
         <Empty
