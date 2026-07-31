@@ -9,6 +9,7 @@ import { UserRepository } from "../repositories/user.js";
 import { ApiKeyRepository } from "../repositories/api-key.js";
 import { mintApiKey } from "../auth/mint-key.js";
 import { clearRepoAccessCache } from "../auth/repo-access.js";
+import type { SkippedRepo } from "./orgs.js";
 
 // Org admin surface. The tests that matter here are the negative ones: an admin
 // of org A must not be able to touch org B's members, keys or repos.
@@ -206,9 +207,13 @@ test("installation sync onboards what the caller can access, skips the rest", as
   const alice = await signIn("alice");
   const res = await send(app, "POST", `/api/orgs/${orgA}/installations/sync`, alice, { installation_id: 77 });
   expect(res.status).toBe(200);
-  const body = (await res.json()) as { onboarded: string[]; skipped: string[] };
+  const body = (await res.json()) as { onboarded: string[]; skipped: SkippedRepo[] };
   expect(body.onboarded).toEqual(["github.com/acme/newrepo"]);
-  expect(body.skipped).toEqual(["acme/secretrepo"]);
+  // The reason must survive to the client, and must name the login that was
+  // checked — "you don't have GitHub access" without saying *who* is unactionable.
+  expect(body.skipped).toEqual([
+    { canonical: "acme/secretrepo", reason: "no_github_access", checked_login: "alice" },
+  ]);
   expect(new RepoRepository(db).getActiveByFingerprint("github.com/acme/newrepo")?.org_id).toBe(orgA);
 });
 
@@ -252,8 +257,12 @@ test("a repo already owned by another org is never re-homed by sync", async () =
   // Carol syncs the same installation into org B. She has GitHub access to both
   // repos, but newrepo already belongs to org A and must be left there.
   const res = await send(app, "POST", `/api/orgs/${orgB}/installations/sync`, carol, { installation_id: 77 });
-  const body = (await res.json()) as { onboarded: string[]; skipped: string[] };
-  expect(body.skipped).toContain("acme/newrepo");
+  const body = (await res.json()) as { onboarded: string[]; skipped: SkippedRepo[] };
+  // An ownership conflict must not be reported as a GitHub access failure — that
+  // sends people hunting for a permissions problem they do not have.
+  expect(body.skipped).toEqual([
+    { canonical: "acme/newrepo", reason: "owned_by_another_org", owner_org_name: "Org A" },
+  ]);
   expect(body.onboarded).toEqual(["github.com/acme/secretrepo"]);
   expect(new RepoRepository(db).getByFingerprint("github.com/acme/newrepo")?.org_id).toBe(orgA);
   expect(new RepoRepository(db).getByFingerprint("github.com/acme/secretrepo")?.org_id).toBe(orgB);

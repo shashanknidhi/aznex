@@ -28,10 +28,18 @@ export function createAuth(db: Database, opts?: { testMode?: boolean }) {
     // aznex schema and mean different things.
     user: { modelName: "auth_user" },
     session: { modelName: "auth_session" },
-    account: { modelName: "auth_account" },
     verification: { modelName: "auth_verification" },
     // testMode lets tests mint sessions without a live GitHub OAuth roundtrip.
     emailAndPassword: { enabled: opts?.testMode ?? false },
+    // Implicit linking is off. better-auth defaults it ON, which means a second
+    // GitHub account whose verified primary email matches an existing user is
+    // folded into that user's row — silently inheriting its aznex identity, org
+    // roles and super-admin status. Every gate here keys on one github_login, so
+    // one aznex user must mean exactly one GitHub identity.
+    account: {
+      modelName: "auth_account",
+      accountLinking: { disableImplicitLinking: true },
+    },
     socialProviders: githubOAuthConfigured()
       ? {
           github: {
@@ -39,6 +47,11 @@ export function createAuth(db: Database, opts?: { testMode?: boolean }) {
             clientSecret: process.env["GITHUB_OAUTH_CLIENT_SECRET"]!,
             // user.name carries the GitHub login — repo permission checks key on it.
             mapProfileToUser: (profile) => ({ name: profile.login }),
+            // Refresh it on every sign-in. Otherwise a GitHub rename leaves
+            // auth_user.name frozen at the old login forever, and the
+            // collaborator check below asks GitHub about a name that no longer
+            // exists.
+            overrideUserInfoOnSignIn: true,
           },
         }
       : {},
@@ -65,14 +78,23 @@ export function sessionOrApiKeyAuth(auth: Auth | null): MiddlewareHandler<AppEnv
     if (!session) return c.json({ error: "unauthorized" }, 401);
 
     const db = c.get("db");
-    // github account id for this better-auth user (null in email/password testMode)
+    // github account id for this better-auth user (null in email/password
+    // testMode). ORDER BY is not cosmetic: without it SQLite may return either
+    // row when an auth user somehow has two github accounts, so the identity —
+    // and therefore the authorization decision — would be non-deterministic.
+    // Oldest wins, so a verdict never flips between requests.
     const account = db
-      .prepare("SELECT accountId FROM auth_account WHERE userId = ? AND providerId = 'github'")
+      .prepare(
+        `SELECT accountId FROM auth_account
+          WHERE userId = ? AND providerId = 'github'
+          ORDER BY createdAt ASC, accountId ASC
+          LIMIT 1`,
+      )
       .get(session.user.id) as { accountId: string } | null;
     const githubId = account?.accountId ?? `ba:${session.user.id}`;
 
     const users = new UserRepository(db);
-    const user =
+    let user =
       users.getByGithubId(githubId) ??
       users.create({
         github_id: githubId,
@@ -81,6 +103,14 @@ export function sessionOrApiKeyAuth(auth: Auth | null): MiddlewareHandler<AppEnv
         avatar_url: session.user.image ?? null,
         metadata: {},
       });
+    // github_login used to be write-once, so a GitHub rename left every gate
+    // below asking about a login that no longer exists — denying access the
+    // account has, and honouring memberships and allowlist entries it no longer
+    // matches. github_id is the stable key; the login is a mutable label.
+    if (session.user.name && session.user.name !== user.github_login) {
+      console.warn(`[auth] github_login changed for ${user.id}: ${user.github_login} → ${session.user.name}`);
+      user = users.update(user.id, { github_login: session.user.name, display_name: session.user.name }) ?? user;
+    }
     // The aznex user row is created above before this gate runs, on purpose: an
     // uninvited login still 403s, and the row is what a later org invite binds to.
     if (!loginAllowed(db, user.github_login)) {

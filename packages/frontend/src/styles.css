@@ -1,20 +1,501 @@
-:root { font-family: system-ui, sans-serif; color: #1a1a1a; }
-body { margin: 0; background: #fafafa; }
-.container { max-width: 760px; margin: 0 auto; padding: 2rem 1rem; }
-.center { text-align: center; margin-top: 20vh; }
-.muted { color: #777; font-size: 0.9em; }
-.error { color: #b00020; }
-.list { list-style: none; padding: 0; }
-.card { background: #fff; border: 1px solid #e2e2e2; border-radius: 8px; padding: 0.75rem 1rem; margin-bottom: 0.6rem; cursor: pointer; }
-.card:hover { border-color: #999; }
-.badge { display: inline-block; font-size: 0.72em; padding: 0.1em 0.55em; border-radius: 999px; background: #e5f2e5; color: #226622; }
-.badge.type { background: #e8ecfb; color: #2b3d8f; }
-.badge.revoked { background: #fdeed8; color: #8a5a00; }
-.card .small { margin-left: 0.6rem; }
-.toolbar { display: flex; gap: 0.5rem; margin: 1rem 0; }
-.toolbar input { flex: 1; padding: 0.45rem 0.6rem; }
-button { padding: 0.5rem 1rem; cursor: pointer; }
-button.small { padding: 0.15rem 0.6rem; font-size: 0.78em; }
-button.danger { color: #b00020; border-color: #b00020; }
-.repo-row { display: flex; justify-content: space-between; align-items: center; padding: 0.3rem 0; }
-code { background: #f0f0f0; padding: 0.1em 0.3em; border-radius: 4px; }
+/*
+ * Aznex UI. Plain CSS with custom properties — no framework, no build step
+ * beyond Vite. Light and dark both matter: `color-scheme` is what stops native
+ * inputs rendering dark on a hardcoded light page.
+ */
+
+:root {
+  color-scheme: light dark;
+
+  --bg: #fbfbfa;
+  --surface: #ffffff;
+  --surface-2: #f4f4f2;
+  --text: #17171a;
+  --text-muted: #5b5b63; /* 6.6:1 on --bg; the old #777 was 4.4:1 and carried essential info */
+  --border: #e0e0dc;
+  --border-strong: #b9b9b2;
+
+  --accent: #2f4bd8;
+  --accent-fg: #ffffff;
+  --accent-weak: #e8ecfb;
+  --danger: #b3261e;
+  --danger-weak: #fdecea;
+  --warn: #8a5a00;
+  --warn-weak: #fdeed8;
+  --ok: #1f6f43;
+  --ok-weak: #e3f3e9;
+
+  --fs-xs: 0.75rem;
+  --fs-sm: 0.875rem;
+  --fs-md: 1rem;
+  --fs-lg: 1.125rem;
+  --fs-xl: 1.375rem;
+  --fs-2xl: 1.75rem;
+  --lh-tight: 1.25;
+  --lh: 1.55;
+
+  --s1: 0.25rem;
+  --s2: 0.5rem;
+  --s3: 0.75rem;
+  --s4: 1rem;
+  --s5: 1.5rem;
+  --s6: 2rem;
+  --s7: 3rem;
+
+  --radius: 8px;
+  --radius-sm: 5px;
+  --radius-pill: 999px;
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.05), 0 1px 8px rgb(0 0 0 / 0.04);
+  --font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  --measure: 68ch;
+  --shell-w: 60rem;
+  --dur: 120ms;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #131316;
+    --surface: #1b1b1f;
+    --surface-2: #24242a;
+    --text: #ececef;
+    --text-muted: #a2a2ad; /* 6.3:1 on --bg */
+    --border: #2e2e35;
+    --border-strong: #45454e;
+
+    --accent: #8fa4ff;
+    --accent-fg: #10101a;
+    --accent-weak: #1e2340;
+    --danger: #ff8a80;
+    --danger-weak: #331a19;
+    --warn: #e8b962;
+    --warn-weak: #33270f;
+    --ok: #7ddba4;
+    --ok-weak: #12291d;
+    --shadow: 0 1px 2px rgb(0 0 0 / 0.4);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+
+/* ── base ─────────────────────────────────────────────────────────────────── */
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font);
+  font-size: var(--fs-md);
+  line-height: var(--lh);
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3 {
+  line-height: var(--lh-tight);
+  margin: 0 0 var(--s3);
+  letter-spacing: -0.011em;
+}
+h1 { font-size: var(--fs-2xl); }
+h2 { font-size: var(--fs-xl); margin-top: var(--s6); }
+h3 { font-size: var(--fs-lg); margin-top: var(--s5); }
+/* The first heading in a section shouldn't be pushed down by that top margin. */
+h2:first-child, h3:first-child { margin-top: 0; }
+
+p { margin: 0 0 var(--s3); }
+
+a {
+  color: var(--accent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  background: var(--surface-2);
+  padding: 0.1em 0.35em;
+  border-radius: var(--radius-sm);
+  overflow-wrap: anywhere;
+}
+
+.container {
+  max-width: var(--shell-w);
+  margin: 0 auto;
+  padding: var(--s4) var(--s3) var(--s7);
+}
+
+.muted {
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+
+.center {
+  max-width: 26rem;
+  margin: 12vh auto 0;
+  text-align: center;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+.skip-link {
+  position: absolute;
+  left: -9999px;
+}
+.skip-link:focus {
+  left: var(--s3);
+  top: var(--s3);
+  z-index: 10;
+  background: var(--surface);
+  padding: var(--s2) var(--s3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+}
+
+/* ── buttons ──────────────────────────────────────────────────────────────── */
+/* Applied to real <button>/<a> elements. Note .btn-danger sets a background:
+   border-color alone is a no-op on natively-drawn buttons, which is why the old
+   destructive buttons didn't look destructive. */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s2);
+  min-height: 2.25rem;
+  padding: var(--s2) var(--s4);
+  font: inherit;
+  font-size: var(--fs-sm);
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  text-decoration: none;
+  transition: background var(--dur), border-color var(--dur);
+}
+.btn:hover:not(:disabled) { background: var(--surface-2); }
+
+.btn-primary {
+  background: var(--accent);
+  color: var(--accent-fg);
+  border-color: transparent;
+  font-weight: 500;
+}
+.btn-primary:hover:not(:disabled) { filter: brightness(1.08); background: var(--accent); }
+
+.btn-danger { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 45%, var(--border)); }
+.btn-danger:hover:not(:disabled) { background: var(--danger-weak); }
+
+.btn-ghost { background: transparent; border-color: transparent; }
+.btn-ghost:hover:not(:disabled) { background: var(--surface-2); }
+
+/* 2rem, not the ~18px the old .small was — every destructive action used it. */
+.btn-sm { min-height: 2rem; padding: var(--s1) var(--s3); font-size: var(--fs-xs); }
+
+.btn:disabled,
+.btn[aria-busy="true"] { opacity: 0.55; cursor: not-allowed; }
+
+/* ── header ───────────────────────────────────────────────────────────────── */
+
+.shell-header {
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.shell-bar {
+  max-width: var(--shell-w);
+  margin: 0 auto;
+  padding: var(--s3);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s3);
+}
+
+.wordmark {
+  font-weight: 600;
+  font-size: var(--fs-lg);
+  letter-spacing: -0.02em;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.shell-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s1);
+}
+
+.shell-nav-link {
+  padding: var(--s1) var(--s3);
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+  text-decoration: none;
+}
+.shell-nav-link:hover { background: var(--surface-2); color: var(--text); }
+.shell-nav-link[aria-current="page"] { background: var(--accent-weak); color: var(--accent); font-weight: 500; }
+
+.shell-identity {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  font-size: var(--fs-sm);
+}
+.shell-login { font-family: var(--font-mono); font-size: var(--fs-xs); color: var(--text-muted); }
+
+.crumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2);
+  align-items: center;
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+  margin-bottom: var(--s4);
+}
+.crumbs a { color: var(--text-muted); }
+.crumbs a:hover { color: var(--accent); }
+.crumb-sep { margin-right: var(--s2); color: var(--border-strong); }
+
+/* ── lists, rows, cards ───────────────────────────────────────────────────── */
+
+.list {
+  list-style: none;
+  margin: 0 0 var(--s4);
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+}
+
+/* Rows wrap instead of squashing their action button to nothing. */
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2);
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--s3);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.row > * { min-width: 0; }
+.row-main { display: flex; flex-direction: column; gap: var(--s1); min-width: 0; }
+.row-actions { display: flex; flex-wrap: wrap; gap: var(--s2); }
+
+.card {
+  position: relative;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  transition: border-color var(--dur), box-shadow var(--dur);
+}
+.card:hover { border-color: var(--border-strong); box-shadow: var(--shadow); }
+
+/* The whole card is one link, so keyboard and cmd-click both work. It used to be
+   an <li onClick>, which meant the product's core action was mouse-only. */
+.card-link {
+  display: block;
+  padding: var(--s3) var(--s4);
+  color: inherit;
+  text-decoration: none;
+}
+.card-link:focus-visible { outline-offset: -2px; }
+.card-title { font-weight: 600; }
+.card-preview { margin: var(--s2) 0 0; }
+.card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2);
+  align-items: center;
+  margin: var(--s2) 0 0;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+/* Outside the anchor — nesting a button inside a link is invalid, and made the
+   delete target overlap the navigation target. */
+.card-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--s2);
+  padding: 0 var(--s4) var(--s3);
+}
+
+.badge {
+  display: inline-block;
+  padding: 0.1em 0.6em;
+  border-radius: var(--radius-pill);
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  white-space: nowrap;
+}
+.badge-neutral { background: var(--surface-2); color: var(--text-muted); }
+.badge-type { background: var(--accent-weak); color: var(--accent); }
+.badge-ok { background: var(--ok-weak); color: var(--ok); }
+.badge-warn { background: var(--warn-weak); color: var(--warn); }
+.badge-danger { background: var(--danger-weak); color: var(--danger); }
+
+/* ── notes, empty states, flash ───────────────────────────────────────────── */
+
+.note {
+  padding: var(--s3) var(--s4);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  margin-bottom: var(--s4);
+}
+.note > :last-child { margin-bottom: 0; }
+.note-info { background: var(--accent-weak); border-color: transparent; }
+.note-warn { background: var(--warn-weak); border-color: transparent; color: var(--warn); }
+.note-danger { background: var(--danger-weak); border-color: transparent; color: var(--danger); }
+.note-danger h1 { color: var(--text); }
+.note-detail { margin-top: var(--s2); font-size: var(--fs-xs); }
+.note-detail summary { cursor: pointer; color: var(--text-muted); }
+
+.empty {
+  padding: var(--s6) var(--s4);
+  text-align: center;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius);
+  margin-bottom: var(--s4);
+}
+.empty-title { font-weight: 600; margin-bottom: var(--s2); }
+.empty-body { color: var(--text-muted); font-size: var(--fs-sm); max-width: 46ch; margin: 0 auto; }
+.empty-action { margin-top: var(--s4); display: flex; justify-content: center; gap: var(--s2); flex-wrap: wrap; }
+
+.flash { color: var(--ok); font-size: var(--fs-sm); }
+
+/* ── forms ────────────────────────────────────────────────────────────────── */
+
+/* Stacked by default; a row only once there's width for one. This is what makes
+   the three-input create-org form usable on a phone. */
+.toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+  margin: var(--s4) 0;
+}
+
+.field { display: flex; flex-direction: column; gap: var(--s1); min-width: 0; flex: 1; }
+.field label { font-size: var(--fs-xs); font-weight: 500; color: var(--text-muted); }
+
+input,
+select {
+  font: inherit;
+  font-size: var(--fs-sm);
+  padding: var(--s2) var(--s3);
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  min-width: 0;
+  width: 100%;
+}
+
+.form-actions { display: flex; gap: var(--s2); align-items: flex-end; flex-wrap: wrap; }
+
+/* ── memory detail ────────────────────────────────────────────────────────── */
+
+/* pre-wrap: extracted content has real newlines and code blocks, which used to
+   collapse into one paragraph-shaped wall. */
+.memory-content {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-width: var(--measure);
+  margin-bottom: var(--s4);
+}
+.memory-narrative { max-width: var(--measure); color: var(--text-muted); }
+
+.plain-list { list-style: none; padding: 0; margin: 0 0 var(--s4); display: flex; flex-direction: column; gap: var(--s2); }
+.plain-list li { max-width: var(--measure); }
+
+.tags { list-style: none; display: flex; flex-wrap: wrap; gap: var(--s2); padding: 0; margin: 0 0 var(--s4); }
+
+.files { list-style: none; padding: 0; margin: 0 0 var(--s4); display: flex; flex-direction: column; gap: var(--s1); }
+
+/* ── pagination ───────────────────────────────────────────────────────────── */
+
+.pager {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s3);
+  align-items: center;
+  justify-content: center;
+  margin-top: var(--s5);
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+
+/* ── dialog ───────────────────────────────────────────────────────────────── */
+
+.confirm {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  padding: var(--s5);
+  max-width: 30rem;
+  width: calc(100% - 2rem);
+  box-shadow: 0 8px 40px rgb(0 0 0 / 0.18);
+}
+.confirm::backdrop { background: rgb(0 0 0 / 0.4); }
+.confirm h2 { margin-top: 0; font-size: var(--fs-lg); }
+.confirm-actions { display: flex; flex-wrap: wrap; gap: var(--s2); justify-content: flex-end; margin-top: var(--s4); }
+
+/* ── skeleton ─────────────────────────────────────────────────────────────── */
+
+.skeleton { padding: var(--s3) var(--s4); display: flex; flex-direction: column; gap: var(--s2); }
+.skeleton-line {
+  display: block;
+  height: 0.7rem;
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+.skeleton-line-short { width: 25%; }
+.skeleton-line-medium { width: 60%; }
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
+/* ── copyable command ─────────────────────────────────────────────────────── */
+
+.command {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2);
+  align-items: center;
+  padding: var(--s3);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: var(--s3);
+}
+.command code { background: transparent; padding: 0; flex: 1; min-width: 0; }
+
+/* ── wider than 40rem ─────────────────────────────────────────────────────── */
+
+@media (min-width: 40rem) {
+  .container { padding: var(--s5) var(--s5) var(--s7); }
+  .shell-bar { padding: var(--s3) var(--s5); }
+  /* Nav sits left, identity pushes right. */
+  .shell-identity { margin-left: auto; }
+  .toolbar { flex-direction: row; align-items: flex-end; }
+}

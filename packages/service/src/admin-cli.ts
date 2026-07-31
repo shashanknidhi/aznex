@@ -4,6 +4,7 @@
 //
 //   bun src/admin-cli.ts add-org acme --name "Acme Inc" --admins alice,bob
 //   bun src/admin-cli.ts add-repo github.com/acme/api --github-repo-id 9001 --installation-id 42 --org acme
+//   bun src/admin-cli.ts move-repo github.com/acme/api --org other-org
 //   bun src/admin-cli.ts add-key --github-login alice --github-id 12345
 //
 // ponytail: argv parsing by hand. This is now only the bootstrap path — the
@@ -24,6 +25,20 @@ export interface AddRepoOpts {
   orgId: string; // owning tenant — required: a repo with no org is denied
 }
 
+// Thrown when a repo is already owned by a different tenant. A distinct class so
+// callers can report the real reason instead of guessing — the installation sync
+// used to file this under "you don't have GitHub access", which is a different
+// problem with a different fix.
+export class RepoOwnedByAnotherOrgError extends Error {
+  constructor(
+    readonly fingerprint: string,
+    readonly ownerOrgId: string,
+  ) {
+    super(`${fingerprint} already belongs to another org`);
+    this.name = "RepoOwnedByAnotherOrgError";
+  }
+}
+
 export function addRepo(db: Database, opts: AddRepoOpts) {
   const parts = opts.fingerprint.split("/");
   if (parts.length < 3) throw new Error(`fingerprint must be host/owner/name, got: ${opts.fingerprint}`);
@@ -39,15 +54,26 @@ export function addRepo(db: Database, opts: AddRepoOpts) {
     });
   }
   const repos = new RepoRepository(db);
-  const existing = repos.getByFingerprint(opts.fingerprint);
+  // Match on fingerprint first, then on GitHub's numeric id: a renamed (or
+  // differently-cased) repo is the same repo, and inserting it again would hit
+  // the github_repo_id UNIQUE constraint instead of reactivating it.
+  const existing =
+    repos.getByFingerprint(opts.fingerprint) ?? repos.getByGithubRepoId(opts.githubRepoId);
   if (existing) {
     // Re-onboarding reactivates. A repo already owned by another org is not
     // silently stolen — the caller's route must have checked ownership first.
     if (existing.org_id && existing.org_id !== opts.orgId) {
-      throw new Error(`${opts.fingerprint} already belongs to another org`);
+      throw new RepoOwnedByAnotherOrgError(opts.fingerprint, existing.org_id);
     }
-    repos.update(existing.id, { status: "active", org_id: opts.orgId });
-    return repos.getByFingerprint(opts.fingerprint)!;
+    repos.update(existing.id, {
+      status: "active",
+      org_id: opts.orgId,
+      // Adopt the current name — GitHub renames are silent otherwise.
+      fingerprint: opts.fingerprint,
+      canonical,
+      github_installation_id: opts.installationId,
+    });
+    return repos.getById(existing.id)!;
   }
   return repos.create({
     fingerprint: opts.fingerprint,
@@ -58,6 +84,22 @@ export function addRepo(db: Database, opts: AddRepoOpts) {
     status: "active",
     metadata: {},
   });
+}
+
+export interface MoveRepoOpts {
+  fingerprint: string;
+  orgId: string;
+}
+
+// The escape hatch for a repo onboarded into the wrong tenant. addRepo refuses to
+// re-home (correctly — that would let any org admin steal another tenant's repo),
+// and de-boarding leaves org_id set, so without this the only fix was direct SQL.
+export function moveRepo(db: Database, opts: MoveRepoOpts) {
+  const repos = new RepoRepository(db);
+  const repo = repos.getByFingerprint(opts.fingerprint);
+  if (!repo) throw new Error(`unknown repo: ${opts.fingerprint}`);
+  repos.update(repo.id, { org_id: opts.orgId, status: "active" });
+  return repos.getById(repo.id)!;
 }
 
 export interface AddOrgOpts {
@@ -134,6 +176,20 @@ if (import.meta.main) {
     }
     const repo = addRepo(db, { fingerprint, githubRepoId, installationId, orgId: org.id });
     console.log(`repo onboarded: ${repo.fingerprint} → org ${org.slug} (installation ${repo.github_installation_id})`);
+  } else if (cmd === "move-repo") {
+    const fingerprint = args[0];
+    const orgSlug = flag(args, "org");
+    if (!fingerprint || !orgSlug) {
+      console.error("usage: move-repo <host/owner/name> --org <slug>");
+      process.exit(1);
+    }
+    const org = new OrgRepository(db).getBySlug(orgSlug);
+    if (!org) {
+      console.error(`unknown org: ${orgSlug}`);
+      process.exit(1);
+    }
+    const repo = moveRepo(db, { fingerprint, orgId: org.id });
+    console.log(`repo re-homed: ${repo.fingerprint} → org ${org.slug}`);
   } else if (cmd === "add-key") {
     const githubLogin = flag(args, "github-login");
     const githubId = flag(args, "github-id");
@@ -144,7 +200,7 @@ if (import.meta.main) {
     const { token } = addKey(db, { githubLogin, githubId, name: flag(args, "name") });
     console.log(`API key for ${githubLogin} (shown once, store it now):\n${token}`);
   } else {
-    console.error("usage: admin-cli.ts <add-org|add-repo|add-key> …");
+    console.error("usage: admin-cli.ts <add-org|add-repo|move-repo|add-key> …");
     process.exit(1);
   }
 }

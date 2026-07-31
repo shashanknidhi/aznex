@@ -118,3 +118,77 @@ test("a login with no org membership cannot hold a session", async () => {
   expect(after.status).toBe(403);
   expect(((await after.json()) as any).error).toBe("github_login_not_allowed");
 });
+
+// ── identity resolution ─────────────────────────────────────────────────────
+// Every gate (loginAllowed, isSuperAdmin, the org role, the GitHub collaborator
+// check) keys on user.github_login. github_id is the stable identity; the login
+// is a mutable label, and it used to be written exactly once.
+
+test("a renamed GitHub login is re-synced onto the existing aznex user", async () => {
+  const { db, app } = await seed();
+  const cookie = await signUpAndGetCookie(app);
+  expect((await app.request("/api/repos", { headers: { Cookie: cookie } })).status).toBe(200);
+
+  const users = new UserRepository(db);
+  const authUserId = (db.prepare("SELECT id FROM auth_user WHERE email = 'alice@example.com'").get() as any).id;
+  const before = users.getByGithubId(`ba:${authUserId}`)!;
+  expect(before.github_login).toBe("alice");
+
+  // GitHub rename: the provider now reports a different login for the same account.
+  db.prepare("UPDATE auth_user SET name = 'alice-renamed' WHERE id = ?").run(authUserId);
+  new OrgRepository(db).setMember(new OrgRepository(db).getBySlug("acme")!.id, "alice-renamed", "member");
+
+  expect((await app.request("/api/repos", { headers: { Cookie: cookie } })).status).toBe(200);
+  const after = users.getById(before.id)!;
+  expect(after.github_login).toBe("alice-renamed"); // same row, corrected label
+  expect(users.getByGithubId(`ba:${authUserId}`)!.id).toBe(before.id); // no duplicate user
+});
+
+// The direction that matters for security: a stale login must not keep honouring
+// a membership that was granted to the *old* name.
+test("after a rename, access follows the new login, not the stale one", async () => {
+  const { db, app } = await seed();
+  const cookie = await signUpAndGetCookie(app);
+  const authUserId = (db.prepare("SELECT id FROM auth_user WHERE email = 'alice@example.com'").get() as any).id;
+
+  // Renamed, and the org only ever invited the old name.
+  db.prepare("UPDATE auth_user SET name = 'someone-else' WHERE id = ?").run(authUserId);
+  const res = await app.request("/api/repos", { headers: { Cookie: cookie } });
+  expect(res.status).toBe(403);
+  expect(((await res.json()) as any).error).toBe("github_login_not_allowed");
+});
+
+test("the github account lookup is deterministic when a user has two linked accounts", async () => {
+  const { db, app } = await seed();
+  const cookie = await signUpAndGetCookie(app);
+  const authUserId = (db.prepare("SELECT id FROM auth_user WHERE email = 'alice@example.com'").get() as any).id;
+
+  // Implicit linking is disabled, but the schema has no constraint preventing
+  // this, so the query must still pick one row predictably rather than letting
+  // SQLite decide which identity — and which permissions — the caller gets.
+  const insert = db.prepare(
+    `INSERT INTO auth_account (id, accountId, providerId, userId, createdAt, updatedAt)
+     VALUES (?, ?, 'github', ?, ?, ?)`,
+  );
+  insert.run("acct-new", "222", authUserId, 2000, 2000);
+  insert.run("acct-old", "111", authUserId, 1000, 1000);
+
+  const orgs = new OrgRepository(db);
+  const orgId = orgs.getBySlug("acme")!.id;
+  orgs.setMember(orgId, "alice", "member");
+
+  // Oldest account wins, every time.
+  for (let i = 0; i < 3; i++) {
+    expect((await app.request("/api/repos", { headers: { Cookie: cookie } })).status).toBe(200);
+    expect(new UserRepository(db).getByGithubId("111")).not.toBeNull();
+    expect(new UserRepository(db).getByGithubId("222")).toBeNull();
+  }
+});
+
+test("implicit account linking is disabled", () => {
+  const auth = createAuth(openDatabase(":memory:"), { testMode: true });
+  // better-auth defaults this ON: a second GitHub account with a matching
+  // verified email would be folded into an existing user, inheriting its org
+  // roles and super-admin status.
+  expect(auth.options.account?.accountLinking?.disableImplicitLinking).toBe(true);
+});

@@ -8,7 +8,7 @@ import { MemoryRepository } from "../repositories/memory.js";
 import { MemoryAnchorRepository } from "../repositories/memory-anchor.js";
 import { UserRepository } from "../repositories/user.js";
 import type { Database } from "bun:sqlite";
-import type { Memory } from "@aznex/shared";
+import { MEMORIES_PAGE_SIZE, MemoryTypeSchema, type Memory, type OrgRole, type User } from "@aznex/shared";
 
 // Humans read GitHub usernames, not internal user ids.
 function authorLogins(db: Database, memories: Memory[]): Map<string, string> {
@@ -20,7 +20,12 @@ function authorLogins(db: Database, memories: Memory[]): Map<string, string> {
   return logins;
 }
 
-const PAGE_SIZE = 20;
+// Who may delete this memory: its author, an admin of the owning org, or a
+// super admin. Sent per item so the UI never offers a button the API will
+// refuse — and never hides one it would allow.
+function canDelete(user: User, role: OrgRole, authorId: string): boolean {
+  return isSuperAdmin(user.github_login) || role === "admin" || authorId === user.id;
+}
 
 // Frontend read API (#15). Accepts a better-auth browser session (#22) or a
 // Bearer API key.
@@ -31,21 +36,40 @@ export function registerMemoryRoutes(app: Hono<AppEnv>, auth: Auth | null): void
     const page = Math.max(1, Number(c.req.query("page") ?? 1) || 1);
     const q = c.req.query("q")?.trim();
 
+    // Filtering happens here, not in the browser: a client-side filter over one
+    // page contradicts the total and hides matches on later pages.
+    const rawType = c.req.query("type");
+    const parsedType = rawType ? MemoryTypeSchema.safeParse(rawType) : null;
+    if (parsedType && !parsedType.success) return c.json({ error: "invalid_request" }, 400);
+    const type = parsedType?.data;
+
     const db = c.get("db");
     const user = c.get("user");
     const auth = await authorizeRepo({ db, user, fingerprint, config: loadConfig() });
     if (isDenial(auth)) return c.json({ error: auth }, 403);
 
     const memories = new MemoryRepository(db);
-    const offset = (page - 1) * PAGE_SIZE;
+    const offset = (page - 1) * MEMORIES_PAGE_SIZE;
     const [items, total] = q
-      ? [memories.search(fingerprint, q, PAGE_SIZE, offset), memories.countSearch(fingerprint, q)]
-      : [memories.listByRepo(fingerprint, PAGE_SIZE, offset), memories.countByRepo(fingerprint)];
+      ? [
+          memories.search(fingerprint, q, MEMORIES_PAGE_SIZE, offset, type),
+          memories.countSearch(fingerprint, q, type),
+        ]
+      : [
+          memories.listByRepo(fingerprint, MEMORIES_PAGE_SIZE, offset, type),
+          memories.countByRepo(fingerprint, type),
+        ];
     const logins = authorLogins(db, items);
     return c.json({
-      items: items.map((m) => ({ ...m, mine: m.author_id === user.id, author_login: logins.get(m.author_id) })),
+      items: items.map((m) => ({
+        ...m,
+        mine: m.author_id === user.id,
+        can_delete: canDelete(user, auth.role, m.author_id),
+        author_login: logins.get(m.author_id),
+      })),
       total,
       page,
+      page_size: MEMORIES_PAGE_SIZE,
     });
   });
 
@@ -96,10 +120,12 @@ export function registerMemoryRoutes(app: Hono<AppEnv>, auth: Auth | null): void
     if (isDenial(auth)) return c.json({ error: auth === "unknown_repo" ? "not_found" : "forbidden" }, auth === "unknown_repo" ? 404 : 403);
 
     const anchors = new MemoryAnchorRepository(db).listByMemory(memory.id);
+    const user = c.get("user");
     return c.json({
       ...memory,
       anchors,
-      mine: memory.author_id === c.get("user").id,
+      mine: memory.author_id === user.id,
+      can_delete: canDelete(user, auth.role, memory.author_id),
       author_login: authorLogins(db, [memory]).get(memory.author_id),
     });
   });
