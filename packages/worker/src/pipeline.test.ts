@@ -445,3 +445,24 @@ test("the onboarded-repo cache is per identity, so one account's list can't hide
   expect(ingests).toEqual(["axk_personal", "axk_work"]); // both got through
   expect(seen.filter((c) => c.url.endsWith("/api/repos")).length).toBe(2); // one fetch per identity
 });
+
+test("a model that answers in prose drops one session with a named warning, not a stack trace", async () => {
+  const fp = (await import("@aznex/shared")).normalizeRemoteUrl(
+    (await Bun.$`git remote get-url origin`.cwd(import.meta.dir).text()).trim(),
+  )!;
+  const { impl, calls } = fetchRouter([fp]);
+  const warnings: string[] = [];
+  const origWarn = console.warn;
+  console.warn = (...a: unknown[]) => warnings.push(a.join(" "));
+  try {
+    const pipeline = createPipeline({
+      runner: async () => "Based on the session transcript, I found nothing worth recording.",
+      ingest: { serviceUrl: "http://svc", apiKey: "k", fetchImpl: impl, baseDelayMs: 1 },
+    });
+    for (const e of EVT("prose-1")) await pipeline(e); // must not throw out to the queue
+  } finally {
+    console.warn = origWarn;
+  }
+  expect(warnings.some((w) => w.includes("prose-1") && w.includes(fp) && w.includes("extraction failed"))).toBe(true);
+  expect(calls.some((c) => c.includes("/v1/ingest"))).toBe(false);
+});

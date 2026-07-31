@@ -85,11 +85,22 @@ export function createPipeline(deps: PipelineDeps = {}) {
       return;
     }
 
-    const memories = await extractMemories(
-      buffer.observations,
-      { repoFingerprint: fingerprint, sessionId, agent: buffer.agent },
-      deps.runner,
-    );
+    // One session the model answered badly is a dropped session, not a worker
+    // fault: let it escape and the queue logs "pipeline error (payload
+    // dropped)" with a stack trace, which reads like the daemon is broken.
+    let memories;
+    try {
+      memories = await extractMemories(
+        buffer.observations,
+        { repoFingerprint: fingerprint, sessionId, agent: buffer.agent },
+        deps.runner,
+      );
+    } catch (err) {
+      console.warn(
+        `session ${sessionId} (${fingerprint}): extraction failed — ${err instanceof Error ? err.message : err}`,
+      );
+      return;
+    }
 
     const ingestMemories: IngestRequest["memories"] = [];
     for (const m of memories) {

@@ -49,3 +49,6 @@ Each element in the array is an object with exactly these fields:
 - Do not include fields not listed above
 - Include exactly one `summary` record per session (the last element)
 - Extract 2–5 non-summary records per session
+- Reply with the JSON array and nothing else — no preamble, no explanation, no
+  code fence. Your entire response must start with `[` and end with `]`. If
+  there is nothing worth recording, reply with `[]`.
