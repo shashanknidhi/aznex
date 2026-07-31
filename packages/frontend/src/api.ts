@@ -154,6 +154,7 @@ export interface ServerConfig {
 /** Why a repo in a GitHub App installation was not onboarded. */
 export type SkippedRepo =
   | { canonical: string; reason: "no_github_access"; checked_login: string }
+  | { canonical: string; reason: "app_missing_members_permission"; org_login: string }
   | { canonical: string; reason: "owned_by_another_org"; owner_org_name: string | null }
   | { canonical: string; reason: "error"; detail: string };
 

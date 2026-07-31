@@ -169,6 +169,19 @@ export function GithubSetup() {
         </>
       )}
 
+      {result.skipped.some((s) => s.reason === "app_missing_members_permission") && (
+        <Note tone="warn">
+          <p>
+            On an organization repository, most people have access through the organization — a team,
+            the default member permission, or organization ownership — not through a direct
+            collaborator invite. GitHub only reveals those to an app holding the{" "}
+            <strong>Members: read</strong> organization permission, so without it everyone looks like a
+            stranger. An organization owner needs to approve that permission for the Aznex app, then
+            run this again.
+          </p>
+        </Note>
+      )}
+
       {result.skipped.some((s) => s.reason === "owned_by_another_org") && (
         <Note tone="warn">
           <p>
@@ -194,6 +207,8 @@ function skipReason(s: SkippedRepo): string {
       // Naming the login is the whole point: with two GitHub accounts, "you don't
       // have access" is unactionable until you know which identity was checked.
       return `GitHub doesn't list ${s.checked_login} as a collaborator on this repository`;
+    case "app_missing_members_permission":
+      return `Aznex can't see ${s.org_login}'s members — the GitHub App is missing the “Members: read” permission`;
     case "owned_by_another_org":
       return s.owner_org_name
         ? `Already onboarded by ${s.owner_org_name}`

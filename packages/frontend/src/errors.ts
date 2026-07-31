@@ -23,6 +23,8 @@ const MESSAGES: Record<string, string> = {
     "Only the person who captured this memory, or an admin of the organization that owns the repository, can delete it.",
   you_do_not_have_access_to_this_repo:
     "GitHub doesn't list you as a collaborator on that repository, so you can't onboard it.",
+  app_missing_members_permission:
+    "The Aznex GitHub App is missing the “Members: read” organization permission, so it can't see who has access through your organization. A GitHub organization owner needs to approve the app's permission request.",
 
   // validation / conflicts
   invalid_request: "Some of those details aren't valid. Check the fields and try again.",

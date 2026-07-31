@@ -6,7 +6,12 @@ import { loadConfig } from "../config.js";
 import { sessionOrApiKeyAuth, type Auth } from "../auth/session.js";
 import { orgAdminOnly, orgMemberOnly } from "../middleware/org.js";
 import { isSuperAdmin } from "../middleware/auth.js";
-import { listInstallationRepos, resolveRepoInstallation, verifyRepoAccess } from "../auth/repo-access.js";
+import {
+  listInstallationRepos,
+  resolveRepoInstallation,
+  verifyRepoAccess,
+  type RepoAccess,
+} from "../auth/repo-access.js";
 import { OrgRepository } from "../repositories/org.js";
 import { RepoRepository } from "../repositories/repo.js";
 import { ApiKeyRepository } from "../repositories/api-key.js";
@@ -33,6 +38,7 @@ const SyncBody = z.object({ installation_id: z.number().int().positive() });
 // hunting for a GitHub permissions problem they did not have.
 export type SkippedRepo =
   | { canonical: string; reason: "no_github_access"; checked_login: string }
+  | { canonical: string; reason: "app_missing_members_permission"; org_login: string }
   | { canonical: string; reason: "owned_by_another_org"; owner_org_name: string | null }
   | { canonical: string; reason: "error"; detail: string };
 
@@ -47,14 +53,13 @@ async function callerCanAccess(
   c: { get: (k: "user") => any },
   canonical: string,
   installationId: number,
-): Promise<boolean> {
-  const access = await verifyRepoAccess({
+): Promise<RepoAccess> {
+  return await verifyRepoAccess({
     user: c.get("user"),
     // verifyRepoAccess only reads canonical + installation id from the repo.
     repo: { canonical, github_installation_id: installationId } as any,
     config: loadConfig(),
-  }).catch(() => ({ allowed: false }));
-  return access.allowed;
+  }).catch((): RepoAccess => ({ allowed: false, reason: "github_error" }));
 }
 
 export function registerOrgRoutes(app: Hono<AppEnv>, auth: Auth | null): void {
@@ -216,7 +221,14 @@ export function registerOrgRoutes(app: Hono<AppEnv>, auth: Auth | null): void {
 
     try {
       const { githubRepoId, installationId } = await resolveRepoInstallation(canonical, loadConfig());
-      if (!(await callerCanAccess(c, canonical, installationId))) {
+      const access = await callerCanAccess(c, canonical, installationId);
+      if (!access.allowed) {
+        // A misconfigured App is the org admin's problem to fix, not a verdict
+        // on the caller — saying "you have no access" sends them to GitHub to
+        // check a collaborator list that was already correct.
+        if (access.reason === "app_missing_members_permission") {
+          return c.json({ error: "app_missing_members_permission", org_login: access.orgLogin }, 403);
+        }
         return c.json({ error: "you_do_not_have_access_to_this_repo" }, 403);
       }
       const repo = addRepo(c.get("db"), {
@@ -245,9 +257,19 @@ export function registerOrgRoutes(app: Hono<AppEnv>, auth: Auth | null): void {
       const onboarded: string[] = [];
       const skipped: SkippedRepo[] = [];
       for (const r of found) {
-        if (!(await callerCanAccess(c, r.canonical, parsed.data.installation_id))) {
-          console.warn(`[sync] skip ${r.canonical}: GitHub does not list ${login} as a collaborator`);
-          skipped.push({ canonical: r.canonical, reason: "no_github_access", checked_login: login });
+        const access = await callerCanAccess(c, r.canonical, parsed.data.installation_id);
+        if (!access.allowed) {
+          if (access.reason === "app_missing_members_permission") {
+            console.warn(`[sync] skip ${r.canonical}: installation lacks the 'members' permission`);
+            skipped.push({
+              canonical: r.canonical,
+              reason: "app_missing_members_permission",
+              org_login: access.orgLogin ?? r.canonical.split("/")[0]!,
+            });
+          } else {
+            console.warn(`[sync] skip ${r.canonical}: GitHub does not list ${login} as a collaborator`);
+            skipped.push({ canonical: r.canonical, reason: "no_github_access", checked_login: login });
+          }
           continue;
         }
         // Same normalizer as the single-repo route: lowercase host+owner, keep

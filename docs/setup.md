@@ -129,9 +129,23 @@ instance: SQLite means you can't scale this horizontally.
 ### 2. GitHub credentials
 
 - **GitHub App** (powers repo-access checks — required): create one with
-  repository *Metadata: read* permission, install it on your org/repos.
-  Note the **App ID**, generate a **private key**, and note the
-  **installation id** (from the installation page URL).
+  repository *Metadata: read* **and** organization *Members: read*, install it
+  on your org/repos. Note the **App ID**, generate a **private key**, and note
+  the **installation id** (from the installation page URL).
+
+  *Members: read* is not optional for organization repositories. Access checks
+  ask GitHub whether a user is a collaborator on the repo, and on an org repo
+  most people are collaborators through the organization — a team, the default
+  member permission, or organization ownership — rather than through a direct
+  invite. An installation holding only *Metadata: read* cannot see any of those,
+  so every one of those users is reported as having no access. Personal-account
+  repositories are unaffected: they have no organization permissions, and every
+  collaborator there is a direct one.
+
+  Adding the permission to an App that is already installed raises a request
+  each organization owner must approve; until they do, that installation keeps
+  its old permissions. Aznex names this case explicitly instead of blaming the
+  user's GitHub access.
 - **GitHub OAuth app** (powers browser login): callback URL
   `<SERVICE_URL>/api/auth/callback/github`.
 
