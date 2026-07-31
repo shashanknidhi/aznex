@@ -32,13 +32,25 @@ async function defaultInstall(): Promise<number> {
 }
 
 export async function checkForUpdate(deps: SelfUpdateDeps = {}): Promise<void> {
-  if (process.env["AZNEX_AUTO_UPDATE"] === "off") return;
+  // Every branch below logs. Silence used to mean any of "up to date",
+  // "registry unreachable" or "never ran", which made "why am I a version
+  // behind?" unanswerable without digging through npm publish times.
+  if (process.env["AZNEX_AUTO_UPDATE"] === "off") {
+    console.log(`self-update: disabled by AZNEX_AUTO_UPDATE=off — staying on ${pkg.version}`);
+    return;
+  }
   const doFetch = deps.fetchImpl ?? fetch;
   try {
     const res = await doFetch(REGISTRY_URL, { signal: AbortSignal.timeout(10_000) });
-    if (!res.ok) return;
+    if (!res.ok) {
+      console.warn(`self-update: registry returned ${res.status} — staying on ${pkg.version}`);
+      return;
+    }
     const { version } = (await res.json()) as { version: string };
-    if (!isNewerVersion(version, pkg.version)) return;
+    if (!isNewerVersion(version, pkg.version)) {
+      console.log(`self-update: ${pkg.version} is current (latest ${version})`);
+      return;
+    }
 
     console.log(`self-update: ${pkg.version} → ${version} — installing and restarting`);
     const code = await (deps.install ?? defaultInstall)();
@@ -48,7 +60,8 @@ export async function checkForUpdate(deps: SelfUpdateDeps = {}): Promise<void> {
     }
     // Exit cleanly; the daemon manager restarts us on the new version.
     (deps.exit ?? process.exit)(0);
-  } catch {
+  } catch (err) {
     // Registry unreachable — try again next interval. Never block capture.
+    console.warn(`self-update: check failed (${err instanceof Error ? err.message : err}) — staying on ${pkg.version}`);
   }
 }

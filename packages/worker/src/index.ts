@@ -1,12 +1,15 @@
 // @aznex/worker — local background worker
 // Receives coding-agent hook payloads, compresses + extracts learnings,
 // scrubs secrets client-side, and POSTs processed memory to the service.
+import pkg from "../package.json" with { type: "json" };
 import { startWorkerServer } from "./server.js";
 import { checkForUpdate, CHECK_INTERVAL_MS } from "./self-update.js";
 
 export function serve(): void {
   const worker = startWorkerServer();
-  console.log(`aznex worker listening on :${worker.server.port}`);
+  // Version in the boot line: the daemon runs whatever it started with, which
+  // can trail `aznex-worker --version` until it restarts.
+  console.log(`aznex worker ${pkg.version} listening on :${worker.server.port}`);
 
   // Keep dev machines current without manual reinstalls (AZNEX_AUTO_UPDATE=off
   // to pin). A found update installs + exits; the daemon manager restarts us.

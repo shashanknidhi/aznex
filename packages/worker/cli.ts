@@ -11,6 +11,14 @@ export {}; // top-level await needs module context
 const [cmd = "help", ...rest] = process.argv.slice(2);
 
 switch (cmd) {
+  case "--version":
+  case "-v":
+  case "version": {
+    // The *installed* version. The running daemon is whatever it started with,
+    // which is why serve() logs its own version too.
+    console.log((await import("./package.json", { with: { type: "json" } })).default.version);
+    break;
+  }
   case "serve": {
     (await import("./src/index.js")).serve();
     break;
@@ -41,6 +49,7 @@ switch (cmd) {
     console.log(`aznex-worker — Aznex local capture worker
 
 usage:
+  aznex-worker --version                                      print the installed version
   aznex-worker setup --service-url <url> [--api-key] [--new-key] [--agents claude-code,codex]
                                                               install everything (config + daemon + hooks + MCP)
                                                               reuses a valid stored key; --new-key forces a fresh one

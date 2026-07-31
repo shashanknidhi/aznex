@@ -69,3 +69,50 @@ test("AZNEX_AUTO_UPDATE=off disables the check; registry errors are silent", asy
     },
   });
 });
+
+// ── the check always says what it did ────────────────────────────────────────
+
+// Silence used to cover "up to date", "registry down" and "never ran" alike.
+async function logsFrom(run: () => Promise<void>): Promise<string> {
+  const lines: string[] = [];
+  const [log, warn] = [console.log, console.warn];
+  console.log = (...a: unknown[]) => lines.push(a.join(" "));
+  console.warn = (...a: unknown[]) => lines.push(a.join(" "));
+  try {
+    await run();
+  } finally {
+    console.log = log;
+    console.warn = warn;
+  }
+  return lines.join("\n");
+}
+
+test("already current → logs the local and latest versions", async () => {
+  const out = await logsFrom(() => checkForUpdate({ fetchImpl: registry("0.0.1"), exit: () => {} }));
+  expect(out).toContain("is current");
+  expect(out).toContain("latest 0.0.1");
+});
+
+test("registry error status → logs the status rather than going quiet", async () => {
+  const out = await logsFrom(() =>
+    checkForUpdate({ fetchImpl: (async () => new Response("nope", { status: 503 })) as unknown as typeof fetch }),
+  );
+  expect(out).toContain("503");
+});
+
+test("unreachable registry → logs why the version didn't move", async () => {
+  const out = await logsFrom(() =>
+    checkForUpdate({ fetchImpl: (async () => { throw new Error("offline"); }) as unknown as typeof fetch }),
+  );
+  expect(out).toContain("offline");
+});
+
+test("AZNEX_AUTO_UPDATE=off says so instead of looking like a broken check", async () => {
+  process.env["AZNEX_AUTO_UPDATE"] = "off";
+  try {
+    const out = await logsFrom(() => checkForUpdate({ fetchImpl: registry("99.0.0") }));
+    expect(out).toContain("AZNEX_AUTO_UPDATE=off");
+  } finally {
+    delete process.env["AZNEX_AUTO_UPDATE"];
+  }
+});

@@ -1,6 +1,8 @@
 import { join } from "path";
 import { homedir } from "os";
 import { existsSync, readFileSync } from "fs";
+import pkg from "../package.json" with { type: "json" };
+import { isNewerVersion } from "./self-update.js";
 import { CONFIG_PATH, loadWorkerConfig } from "./config.js";
 import { extractionModel, resolveExtractionEngine } from "./extract.js";
 import { codexHooksRegistered, codexMcpRegistered } from "./codex-hooks.js";
@@ -65,6 +67,27 @@ export async function runChecks(deps: DoctorDeps = {}): Promise<CheckResult[]> {
     });
   } else {
     results.push({ name: "config", status: "ok", detail: config.serviceUrl });
+  }
+
+  // 1b. version — warn-only: the daemon self-updates daily, so trailing the
+  // registry for a few hours is normal, not broken.
+  const latest = await doFetch("https://registry.npmjs.org/@aznex/worker/latest", {
+    signal: AbortSignal.timeout(5000),
+  })
+    .then((r) => (r.ok ? (r.json() as Promise<{ version: string }>) : null))
+    .then((body) => body?.version ?? null)
+    .catch(() => null);
+  if (latest === null) {
+    results.push({ name: "version", status: "ok", detail: `${pkg.version} (npm unreachable)` });
+  } else if (isNewerVersion(latest, pkg.version)) {
+    results.push({
+      name: "version",
+      status: "warn",
+      detail: `${pkg.version}, latest is ${latest}`,
+      fix: "the daemon self-updates within 24h; to take it now: bun install -g @aznex/worker@latest",
+    });
+  } else {
+    results.push({ name: "version", status: "ok", detail: pkg.version });
   }
 
   // 2. extraction engine + model (configured agent, or claude-then-codex)
