@@ -158,6 +158,34 @@ export function stripFence(text: string): string {
   return (fenced?.[1] ?? text).trim();
 }
 
+/**
+ * Pull the memory array out of whatever the model actually said. Both engines
+ * are chat models told to answer with JSON, not JSON-mode APIs, so a preamble
+ * ("Based on the session transcript, …") or a code fence is a normal output,
+ * not a malfunction — and it used to take the whole session down with a raw
+ * SyntaxError. Falls back to the outermost [...] span before giving up.
+ */
+export function parseMemoryArray(text: string): unknown[] {
+  const candidates = [stripFence(text)];
+  const bare = candidates[0]!;
+  const start = bare.indexOf("[");
+  const end = bare.lastIndexOf("]");
+  if (start !== -1 && end > start) candidates.push(bare.slice(start, end + 1));
+
+  for (const candidate of candidates) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(candidate);
+    } catch {
+      continue;
+    }
+    if (Array.isArray(parsed)) return parsed;
+  }
+  // Snippet, not the whole answer: the transcript it summarises never leaves
+  // this machine, and the log is not the place to start leaking it.
+  throw new Error(`extraction output is not a JSON array — model said: ${text.trim().slice(0, 200)}`);
+}
+
 const claudeRunner = (claudePath: string): ExtractionRunner => async (promptPath, observationsPath) => {
   const proc = Bun.spawn(
     buildClaudeArgs(claudePath, promptPath, observationsPath, extractionModel("claude")),
@@ -190,7 +218,7 @@ const codexRunner = (codexPath: string): ExtractionRunner => async (promptPath, 
   if ((await proc.exited) !== 0) throw new Error(`codex exited ${proc.exitCode}: ${stderr.slice(0, 300)}`);
   try {
     if (!existsSync(outFile)) throw new Error("codex produced no final message");
-    return stripFence(readFileSync(outFile, "utf-8"));
+    return readFileSync(outFile, "utf-8"); // fences and preamble handled by parseMemoryArray
   } finally {
     rmSync(outFile, { force: true });
   }
@@ -239,9 +267,7 @@ export async function extractMemories(
   writeFileSync(observationsPath, observations.map((o) => JSON.stringify(o)).join("\n"), "utf-8");
 
   try {
-    const resultText = await runner(EXTRACTION_PROMPT_PATH, observationsPath);
-    const raw = JSON.parse(resultText) as unknown;
-    if (!Array.isArray(raw)) throw new Error("extraction output is not a JSON array");
+    const raw = parseMemoryArray(await runner(EXTRACTION_PROMPT_PATH, observationsPath));
 
     const now = Date.now();
     return raw.map((record) =>

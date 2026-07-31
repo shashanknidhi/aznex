@@ -6,6 +6,8 @@ import {
   buildClaudeArgs,
   buildCodexArgs,
   stripFence,
+  parseMemoryArray,
+  extractMemories,
   extractionModel,
   resolveExtractionEngine,
   findClaude as findClaudeReal,
@@ -139,4 +141,61 @@ test("a wrong explicit CLAUDE_CODE_PATH fails loud instead of silently using cod
   } finally {
     delete process.env["CLAUDE_CODE_PATH"];
   }
+});
+
+// ── tolerating what chat models actually reply with ──────────────────────────
+
+// Both engines are chat models told to answer with JSON, not JSON-mode APIs.
+// A pilot machine dropped a whole session to `SyntaxError: Unexpected
+// identifier "Based"` when the model opened with a sentence.
+test("parseMemoryArray accepts a bare JSON array", () => {
+  expect(parseMemoryArray('[{"a":1}]')).toEqual([{ a: 1 }]);
+  expect(parseMemoryArray("  []  ")).toEqual([]);
+});
+
+test("parseMemoryArray unwraps a fenced array", () => {
+  expect(parseMemoryArray('```json\n[{"a":1}]\n```')).toEqual([{ a: 1 }]);
+});
+
+test("parseMemoryArray recovers the array from a prose preamble", () => {
+  expect(parseMemoryArray('Based on the session transcript, here are the records:\n[{"a":1}]')).toEqual([{ a: 1 }]);
+  expect(parseMemoryArray('Here you go:\n```json\n[{"a":1}]\n```\nLet me know if you need more.')).toEqual([{ a: 1 }]);
+});
+
+test("parseMemoryArray rejects a JSON object — the contract is an array", () => {
+  expect(() => parseMemoryArray('{"a":1}')).toThrow("not a JSON array");
+});
+
+test("parseMemoryArray reports what the model said, truncated", () => {
+  expect(() => parseMemoryArray("I could not find anything to extract.")).toThrow(
+    "I could not find anything to extract.",
+  );
+  // The transcript being summarised stays on this machine; the log gets a snippet.
+  let message = "";
+  try {
+    parseMemoryArray("x".repeat(5000));
+  } catch (err) {
+    message = err instanceof Error ? err.message : String(err);
+  }
+  expect(message.length).toBeLessThan(300);
+});
+
+test("extractMemories survives a chatty model and still returns records", async () => {
+  const record = {
+    type: "extracted_learning",
+    title: "t",
+    content: "c",
+    narrative: null,
+    facts: [],
+    concepts: [],
+    files_read: [],
+    files_modified: [],
+  };
+  const memories = await extractMemories(
+    [{ type: "raw_observation", title: "Edit: a.ts", content: "x", files_read: [], files_modified: ["a.ts"] }],
+    { repoFingerprint: "github.com/acme/thing", sessionId: "s1" },
+    async () => `Based on the transcript, here is the array:\n\`\`\`json\n${JSON.stringify([record])}\n\`\`\``,
+  );
+  expect(memories.length).toBe(1);
+  expect(memories[0]!.content).toBe("c");
 });
