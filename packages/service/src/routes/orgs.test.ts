@@ -16,6 +16,10 @@ import type { SkippedRepo } from "./orgs.js";
 
 const realFetch = globalThis.fetch;
 
+// What GET /app/installations/{id} reports. Denials consult it to tell a real
+// "not a collaborator" apart from an App too underpowered to see org access.
+let installationPermissions: Record<string, string> = { metadata: "read", members: "read" };
+
 beforeAll(() => {
   const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
   process.env["GITHUB_APP_ID"] = "12345";
@@ -27,6 +31,14 @@ beforeAll(() => {
     if (u.endsWith("/repos/acme/secretrepo/installation")) return new Response(JSON.stringify({ id: 77 }), { status: 200 });
     if (u.includes("/repos/") && u.endsWith("/installation")) return new Response("not installed", { status: 404 });
     if (u.includes("/access_tokens")) return new Response(JSON.stringify({ token: "t" }), { status: 200 });
+    if (u.includes("/app/installations/"))
+      return new Response(
+        JSON.stringify({
+          account: { login: "acme", type: "Organization" },
+          permissions: installationPermissions,
+        }),
+        { status: 200 },
+      );
     if (u.endsWith("/repos/acme/newrepo")) return new Response(JSON.stringify({ id: 4242 }), { status: 200 });
     if (u.endsWith("/repos/acme/secretrepo")) return new Response(JSON.stringify({ id: 5555 }), { status: 200 });
     // alice is not a collaborator on secretrepo — admin rights must not help.
@@ -53,6 +65,7 @@ afterAll(() => {
 // alice: admin of org A. bob: member of A. carol: admin of org B.
 async function seedTwoOrgs() {
   clearRepoAccessCache();
+  installationPermissions = { metadata: "read", members: "read" };
   delete process.env["AZNEX_ADMIN_GITHUB_LOGINS"];
   const db = openDatabase(":memory:");
   const auth = createAuth(db, { testMode: true });
@@ -215,6 +228,31 @@ test("installation sync onboards what the caller can access, skips the rest", as
     { canonical: "acme/secretrepo", reason: "no_github_access", checked_login: "alice" },
   ]);
   expect(new RepoRepository(db).getActiveByFingerprint("github.com/acme/newrepo")?.org_id).toBe(orgA);
+});
+
+// Regression: with a metadata-only installation, GitHub hides every org-derived
+// grant, so an org owner syncing their own org got "you are not a collaborator"
+// on all of it. Blame the App, not the user.
+test("sync blames a missing App permission, not the caller, when the installation cannot see org members", async () => {
+  const { app, orgA, signIn } = await seedTwoOrgs();
+  installationPermissions = { metadata: "read" };
+  const alice = await signIn("alice");
+  const res = await send(app, "POST", `/api/orgs/${orgA}/installations/sync`, alice, { installation_id: 77 });
+  const body = (await res.json()) as { onboarded: string[]; skipped: SkippedRepo[] };
+  expect(body.skipped).toEqual([
+    { canonical: "acme/secretrepo", reason: "app_missing_members_permission", org_login: "acme" },
+  ]);
+});
+
+test("single-repo onboarding reports a missing App permission with its own code", async () => {
+  const { app, orgA, signIn } = await seedTwoOrgs();
+  installationPermissions = { metadata: "read" };
+  const alice = await signIn("alice");
+  const res = await send(app, "POST", `/api/orgs/${orgA}/repos`, alice, {
+    fingerprint: "github.com/acme/secretrepo",
+  });
+  expect(res.status).toBe(403);
+  expect(await res.json()).toMatchObject({ error: "app_missing_members_permission", org_login: "acme" });
 });
 
 test("de-board hides the repo; another org cannot de-board it; re-onboarding reactivates", async () => {

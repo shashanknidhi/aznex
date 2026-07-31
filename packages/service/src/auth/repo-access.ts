@@ -15,9 +15,29 @@ import type { Config } from "../config.js";
 //     octocat and torvalds both come back "read".
 // GET /collaborators/{user} is the honest signal — 204 for a real collaborator
 // (including org members who inherit access through a team), 404 for everyone else.
+//
+// It is only honest, though, if the installation holds the organization
+// "Members: read" permission, which GitHub documents as required for this
+// endpoint. Without it an installation sees direct collaborators and nothing
+// else, so team access, the org's default member permission and org ownership
+// all read as 404 — which is how an owner with admin on every repo in the org
+// was told they were not a collaborator on one.
+
+// Why access was denied. "Not a collaborator" was the only answer this could
+// give, and it was wrong for the most common org case: a metadata-only App
+// installation cannot see org-derived access at all (see resolve() below), so
+// an org owner with admin on every repo came back looking like a stranger.
+export type DenialReason =
+  | "not_collaborator"
+  | "app_missing_members_permission"
+  | "installation_unavailable"
+  | "github_error";
 
 export interface RepoAccess {
   allowed: boolean;
+  reason?: DenialReason;
+  /** Owning org login, set only for `app_missing_members_permission`. */
+  orgLogin?: string;
 }
 
 // ponytail: in-process Map cache. Fine for a single service instance; move to a
@@ -58,6 +78,33 @@ function appJwt(appId: string, privateKey: string, nowSec: number): string {
 }
 
 const GH_HEADERS = { Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" };
+
+interface InstallationInfo {
+  accountLogin: string;
+  isOrg: boolean;
+  permissions: Record<string, string>;
+}
+
+/** Who the App is installed on, and with which permissions. App JWT only. */
+async function getInstallation(
+  installationId: number | string,
+  jwt: string,
+  doFetch: FetchImpl,
+): Promise<InstallationInfo | null> {
+  const res = await doFetch(`https://api.github.com/app/installations/${installationId}`, {
+    headers: { ...GH_HEADERS, Authorization: `Bearer ${jwt}` },
+  });
+  if (!res.ok) return null;
+  const body = (await res.json()) as {
+    account?: { login?: string; type?: string };
+    permissions?: Record<string, string>;
+  };
+  return {
+    accountLogin: body.account?.login ?? String(installationId),
+    isOrg: body.account?.type === "Organization",
+    permissions: body.permissions ?? {},
+  };
+}
 
 /**
  * List all repos covered by a GitHub App installation (owner picked them on
@@ -155,6 +202,13 @@ export async function verifyRepoAccess(opts: VerifyOpts): Promise<RepoAccess> {
       throw new Error("GitHub App credentials not configured (GITHUB_APP_ID / GITHUB_APP_PRIVATE_KEY)");
     }
 
+    // 0. Personal repos: the owner is not always returned by the collaborator
+    //    endpoint reachable from a metadata-only installation, and asking GitHub
+    //    whether you have access to your own repo is a network call for a
+    //    question the fingerprint already answers.
+    const owner = repo.canonical.split("/")[0] ?? "";
+    if (owner.toLowerCase() === user.github_login.toLowerCase()) return { allowed: true };
+
     // 1. App JWT → installation access token.
     const jwt = appJwt(config.githubAppId, config.githubAppPrivateKey, Math.floor(now / 1000));
     const tokenRes = await doFetch(
@@ -168,7 +222,7 @@ export async function verifyRepoAccess(opts: VerifyOpts): Promise<RepoAccess> {
         `[repo-access] ${repo.canonical}: could not mint installation token ` +
           `${repo.github_installation_id} (${tokenRes.status})`,
       );
-      return { allowed: false };
+      return { allowed: false, reason: "installation_unavailable" };
     }
     const { token } = (await tokenRes.json()) as { token: string };
 
@@ -178,15 +232,38 @@ export async function verifyRepoAccess(opts: VerifyOpts): Promise<RepoAccess> {
       `https://api.github.com/repos/${repo.canonical}/collaborators/${encodeURIComponent(user.github_login)}`,
       { headers: { ...GH_HEADERS, Authorization: `Bearer ${token}` } },
     );
+    if (collabRes.status === 204) return { allowed: true };
+
+    // 3. Denied — but by whom? On an organization-owned repo, four of the five
+    //    ways to have access (team membership, org base permission, org
+    //    ownership, and hence most real users) are only visible to an
+    //    installation that holds the `members` organization permission; GitHub
+    //    documents it as required for this endpoint. Without it every one of
+    //    those users looks like a stranger, and the honest report is "the App
+    //    is underpowered", not "you have no access".
+    const installation = await getInstallation(repo.github_installation_id, jwt, doFetch);
+    if (installation?.isOrg && !installation.permissions["members"]) {
+      console.warn(
+        `[repo-access] ${repo.canonical}: installation ${repo.github_installation_id} lacks ` +
+          `the 'members' organization permission — cannot see org-derived access for ${user.github_login}`,
+      );
+      return {
+        allowed: false,
+        reason: "app_missing_members_permission",
+        orgLogin: installation.accountLogin,
+      };
+    }
+
     // 404 is a real answer ("not a collaborator"). Anything else non-204 means
     // GitHub could not answer, which is a different problem with a different
     // fix — and it is invisible once collapsed into a boolean.
-    if (collabRes.status !== 204 && collabRes.status !== 404) {
+    if (collabRes.status !== 404) {
       console.warn(
         `[repo-access] ${repo.canonical}: collaborator check for ${user.github_login} ` +
           `returned ${collabRes.status} — failing closed`,
       );
+      return { allowed: false, reason: "github_error" };
     }
-    return { allowed: collabRes.status === 204 };
+    return { allowed: false, reason: "not_collaborator" };
   }
 }
