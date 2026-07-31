@@ -3,7 +3,7 @@ import { mkdtempSync, writeFileSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 import { readFileSync } from "fs";
-import { loadWorkerConfig, writeWorkerConfig } from "./config.js";
+import { loadWorkerConfig, writeWorkerConfig, resolveApiKey } from "./config.js";
 import { mergeClaudeSettings } from "./claude-settings.js";
 
 function tmpConfig(content: string): string {
@@ -25,9 +25,9 @@ test("config file supplies values when env is unset", () => {
   }));
   const cfg = loadWorkerConfig(path);
   expect(cfg).toEqual({
-    serviceUrl: "https://svc", apiKey: "axk_x", workerPort: 4000, claudePath: "/opt/claude", codexPath: null,
-    extractAgent: "auto", extractModel: "claude-haiku-4-5", contextEnabled: false, contextMemoryCount: 5,
-    fileContextEnabled: false,
+    serviceUrl: "https://svc", apiKey: "axk_x", apiKeys: {}, workerPort: 4000, claudePath: "/opt/claude",
+    codexPath: null, extractAgent: "auto", extractModel: "claude-haiku-4-5", contextEnabled: false,
+    contextMemoryCount: 5, fileContextEnabled: false,
   });
 });
 
@@ -48,7 +48,7 @@ test("env vars win over the config file", () => {
 test("missing or malformed config file degrades to nulls and defaults", () => {
   const missing = loadWorkerConfig("/nonexistent/config.json");
   expect(missing).toEqual({
-    serviceUrl: null, apiKey: null, workerPort: 29639, claudePath: null, codexPath: null,
+    serviceUrl: null, apiKey: null, apiKeys: {}, workerPort: 29639, claudePath: null, codexPath: null,
     extractAgent: "auto", extractModel: null, contextEnabled: true, contextMemoryCount: 10, fileContextEnabled: true,
   });
   const malformed = loadWorkerConfig(tmpConfig("not json{"));
@@ -176,4 +176,39 @@ test("explicit CLAUDE_CODE_PATH override fails loud when wrong", () => {
   } finally {
     delete process.env["CLAUDE_CODE_PATH"];
   }
+});
+
+// ── per-owner API keys (two GitHub accounts on one machine) ──────────────────
+
+function keysConfig(): ReturnType<typeof loadWorkerConfig> {
+  delete process.env["AZNEX_API_KEY"];
+  return loadWorkerConfig(
+    tmpConfig(JSON.stringify({ apiKey: "axk_personal", apiKeys: { "Ukumi-AI": "axk_work", "": "ignored" } })),
+  );
+}
+
+test("resolveApiKey sends a repo under a mapped owner as that owner's identity", () => {
+  expect(resolveApiKey(keysConfig(), "github.com/ukumi-ai/schroedinger")).toBe("axk_work");
+});
+
+test("resolveApiKey matches owners case-insensitively", () => {
+  expect(resolveApiKey(keysConfig(), "github.com/UKUMI-AI/schroedinger")).toBe("axk_work");
+});
+
+test("resolveApiKey falls back to the default key for unmapped owners", () => {
+  expect(resolveApiKey(keysConfig(), "github.com/shashanknidhi/aznex")).toBe("axk_personal");
+});
+
+test("resolveApiKey falls back to the default key when there is no fingerprint", () => {
+  expect(resolveApiKey(keysConfig(), null)).toBe("axk_personal");
+});
+
+test("empty or non-string per-owner keys are dropped rather than sent as credentials", () => {
+  const cfg = loadWorkerConfig(tmpConfig(JSON.stringify({ apiKey: "axk_personal", apiKeys: { acme: "", corp: 7 } })));
+  expect(cfg.apiKeys).toEqual({});
+  expect(resolveApiKey(cfg, "github.com/acme/thing")).toBe("axk_personal");
+});
+
+test("a malformed apiKeys value degrades to no per-owner keys", () => {
+  expect(loadWorkerConfig(tmpConfig(JSON.stringify({ apiKeys: "axk_x" }))).apiKeys).toEqual({});
 });
