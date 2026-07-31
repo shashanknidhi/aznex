@@ -62,6 +62,12 @@ The daemon self-updates: on start and daily it checks npm, installs a newer
 Set `AZNEX_AUTO_UPDATE=off` to pin a version (then update manually with
 `bun install -g @aznex/worker@latest`).
 
+Because the check is daily, trailing a fresh release by up to 24h is normal —
+a release published just after your daemon started won't land until the next
+check. Every check logs its outcome to `~/.aznex/logs/worker.log`
+(`self-update: 0.1.12 is current (latest 0.1.12)`), so you can tell "up to
+date" from "registry unreachable" instead of guessing at silence.
+
 ## Commands
 
 ```
@@ -69,6 +75,10 @@ aznex-worker setup --service-url <url> [--api-key <key>] [--new-key] [--agents c
                      install everything: config + daemon + hooks + MCP. Reuses a
                      valid stored key; --new-key forces a fresh one. Without
                      --agents, wires whichever of claude/codex is on PATH.
+aznex-worker --version
+                     print the installed version. The running daemon may still
+                     be on an older one until it restarts — `doctor` compares
+                     against npm, and the daemon logs its version at startup
 aznex-worker doctor  check the install — read-only, exits 1 on failure
 aznex-worker serve   run the worker in the foreground (what the daemon runs)
 aznex-worker hook [context|file-context]

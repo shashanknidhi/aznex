@@ -198,3 +198,51 @@ test("buildMcpAddArgs produces the user-scope http registration", () => {
     "--header", "Authorization: Bearer axk_x",
   ]);
 });
+
+// ── version check ────────────────────────────────────────────────────────────
+
+// Answers "which version am I on, and is that behind?" — the question that
+// otherwise needs npm publish-time archaeology.
+function versionFetch(latest: string): typeof fetch {
+  return (async (url: unknown) =>
+    String(url).includes("registry.npmjs.org")
+      ? Response.json({ version: latest })
+      : Response.json({ ok: true })) as unknown as typeof fetch;
+}
+
+async function versionCheck(fetchImpl: typeof fetch): Promise<CheckResult> {
+  return get(
+    await runChecks({
+      configPath: tmpFile("config.json", GOOD_CONFIG),
+      claudeSettingsPath: tmpFile("settings.json", { hooks: ALL_HOOKS }),
+      claudeJsonPath: tmpFile("claude.json", { mcpServers: { aznex: {} } }),
+      pluginDirs: ["/nonexistent"],
+      codexHome: "/nonexistent",
+      fetchImpl,
+    }),
+    "version",
+  );
+}
+
+test("a newer version on npm warns without failing the run", async () => {
+  const check = await versionCheck(versionFetch("99.0.0"));
+  expect(check.status).toBe("warn"); // trailing the registry for a few hours is normal
+  expect(check.detail).toContain("99.0.0");
+  expect(check.fix).toContain("bun install -g @aznex/worker@latest");
+});
+
+test("being on the latest version reports ok", async () => {
+  const pkg = (await import("../package.json", { with: { type: "json" } })).default;
+  const check = await versionCheck(versionFetch(pkg.version));
+  expect(check.status).toBe("ok");
+  expect(check.detail).toBe(pkg.version);
+});
+
+test("an unreachable registry still reports the local version, without warning", async () => {
+  const check = await versionCheck((async (url: unknown) =>
+    String(url).includes("registry.npmjs.org")
+      ? Promise.reject(new Error("offline"))
+      : Response.json({ ok: true })) as unknown as typeof fetch);
+  expect(check.status).toBe("ok");
+  expect(check.detail).toContain("npm unreachable");
+});
