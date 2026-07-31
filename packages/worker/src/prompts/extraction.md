@@ -41,6 +41,8 @@ Each element in the array is an object with exactly these fields:
 ## Rules
 
 - `content` is required and must not be empty
+- `title` is required and must not be null or empty — it is the only thing shown
+  in the memory list, so a missing one makes the memory unreadable at a glance
 - `type` must be exactly one of the four values above
 - `facts` must be an array (empty array `[]` is fine)
 - `concepts` must be an array (empty array `[]` is fine)

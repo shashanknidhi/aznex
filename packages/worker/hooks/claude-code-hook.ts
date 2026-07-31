@@ -7,12 +7,28 @@
 //   context        → POST /context       SessionStart injection; body relayed to stdout
 //   file-context   → POST /file-context  PreToolUse(Read) injection; body relayed to stdout
 
+import { appendFileSync } from "fs";
+
 const TIMEOUTS_MS: Record<string, number> = { hook: 2000, context: 5000, "file-context": 2000 };
 
-export async function forwardHook(endpoint = "hook"): Promise<void> {
+// A dropped event used to be invisible on both sides — the relay swallowed the
+// error and the worker never saw the session, so a whole session going missing
+// left no trace anywhere. Append here instead; still never throws.
+function logDrop(endpoint: string, err: unknown): void {
+  try {
+    const line = `${new Date().toISOString()} hook ${endpoint} dropped — ${err instanceof Error ? err.message : err}\n`;
+    const path = `${process.env["HOME"]}/.aznex/logs/hook.log`;
+    appendFileSync(path, line);
+  } catch {
+    // No home, no logs dir, read-only disk — logging must never break the hook.
+  }
+}
+
+// bodyOverride exists so tests can drive this without a live stdin.
+export async function forwardHook(endpoint = "hook", bodyOverride?: string): Promise<void> {
   const workerUrl = process.env["AZNEX_WORKER_URL"] ?? "http://localhost:29639";
 
-  const body = await Bun.stdin.text();
+  const body = bodyOverride ?? (await Bun.stdin.text());
   try {
     const res = await fetch(`${workerUrl}/${endpoint}`, {
       method: "POST",
@@ -26,8 +42,10 @@ export async function forwardHook(endpoint = "hook"): Promise<void> {
       const text = await res.text();
       if (text) process.stdout.write(text);
     }
-  } catch {
-    // Worker down or slow — drop the event silently rather than stall the agent.
+  } catch (err) {
+    // Worker down or slow — drop the event rather than stall the agent, but
+    // leave a breadcrumb so "nothing was captured" is diagnosable.
+    logDrop(endpoint, err);
   }
 }
 

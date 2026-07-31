@@ -62,7 +62,10 @@ export function MemoryView() {
       ]}
     >
       <Badge tone="type">{typeLabel(memory.type)}</Badge>
-      <h1>{memory.title ?? "Untitled memory"}</h1>
+      {/* No title: the content paragraph below is the headline. An "Untitled
+          memory" heading only pushed the real text down. Matches the list,
+          which already omits the title line when there isn't one. */}
+      {memory.title && <h1>{memory.title}</h1>}
 
       {deleteError != null && <ErrorNote error={deleteError} context="This memory couldn't be deleted." />}
 

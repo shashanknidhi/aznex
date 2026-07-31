@@ -28,6 +28,11 @@ const ONBOARDED_TTL_MS = 5 * 60_000;
 
 export function createPipeline(deps: PipelineDeps = {}) {
   const sessions = new Map<string, SessionBuffer>();
+  // ponytail: unbounded session-id sets — a few hundred bytes per session for
+  // a daemon that restarts on login. Prune by age if a long-lived host cares.
+  const everBuffered = new Set<string>();
+  const sawToolEvent = new Set<string>();
+  const warnedEmpty = new Set<string>();
   // Cached per API key: /api/repos answers for the calling identity, so a
   // machine with a work key and a personal key gets two different lists and
   // one shared cache would hide each account's repos from the other.
@@ -65,7 +70,22 @@ export function createPipeline(deps: PipelineDeps = {}) {
   async function finalizeSession(sessionId: string): Promise<void> {
     const buffer = sessions.get(sessionId);
     sessions.delete(sessionId);
-    if (!buffer || buffer.observations.length === 0) return;
+    // A silent return here made a lost session indistinguishable from one that
+    // never happened: every PostToolUse dropped (relay timeout, daemon restart
+    // wiping this Map) and the log stayed empty. Say so — but Stop fires every
+    // turn, so stay quiet for a session that already ingested (normal
+    // prose-only turn) and say it at most once per session.
+    if (!buffer) {
+      if (!everBuffered.has(sessionId) && !warnedEmpty.has(sessionId)) {
+        warnedEmpty.add(sessionId);
+        console.log(
+          sawToolEvent.has(sessionId)
+            ? `session ${sessionId}: every tool event was filtered as noise — nothing to ingest`
+            : `session ${sessionId}: nothing buffered — no PostToolUse event arrived (check ~/.aznex/logs/hook.log)`,
+        );
+      }
+      return;
+    }
 
     const fingerprint = await computeRepoFingerprint(buffer.cwd);
     if (!fingerprint) {
@@ -155,6 +175,9 @@ export function createPipeline(deps: PipelineDeps = {}) {
     if (!sessionId) return;
 
     if (event === "PostToolUse" && typeof payload["tool_name"] === "string") {
+      // Recorded before the filter: "every event was noise" and "no event ever
+      // arrived" are different failures and want different log lines.
+      sawToolEvent.add(sessionId);
       const observation = compressToolEvent(payload as unknown as ToolEvent);
       if (!observation) return;
       const buffer = sessions.get(sessionId) ?? {
@@ -167,6 +190,7 @@ export function createPipeline(deps: PipelineDeps = {}) {
       };
       buffer.observations.push(observation);
       sessions.set(sessionId, buffer);
+      everBuffered.add(sessionId);
       return;
     }
 

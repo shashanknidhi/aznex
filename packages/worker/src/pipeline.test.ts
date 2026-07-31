@@ -261,6 +261,9 @@ test("session agent comes from the payload stamp; unstamped stays claude-code", 
 
 test("session with only noisy events never POSTs", async () => {
   let fetched = false;
+  const noiseLogs: string[] = [];
+  const origLog = console.log;
+  console.log = (...a: unknown[]) => noiseLogs.push(a.join(" "));
   const pipeline = createPipeline({
     runner: async () => "[]",
     ingest: {
@@ -271,9 +274,15 @@ test("session with only noisy events never POSTs", async () => {
       }) as unknown as typeof fetch,
     },
   });
-  await pipeline({ hook_event_name: "PostToolUse", session_id: "s2", cwd: import.meta.dir, tool_name: "Read", tool_input: {} });
-  await pipeline({ hook_event_name: "Stop", session_id: "s2" });
+  try {
+    await pipeline({ hook_event_name: "PostToolUse", session_id: "s2", cwd: import.meta.dir, tool_name: "Read", tool_input: {} });
+    await pipeline({ hook_event_name: "Stop", session_id: "s2" });
+  } finally {
+    console.log = origLog;
+  }
   expect(fetched).toBe(false);
+  // The filtered-noise line, not the lost-events one: they diagnose differently.
+  expect(noiseLogs.some((l) => l.includes("s2") && l.includes("filtered as noise"))).toBe(true);
 });
 
 function fetchRouter(onboardedFingerprints: string[], ingestStatus = 202) {
@@ -465,4 +474,30 @@ test("a model that answers in prose drops one session with a named warning, not 
   }
   expect(warnings.some((w) => w.includes("prose-1") && w.includes(fp) && w.includes("extraction failed"))).toBe(true);
   expect(calls.some((c) => c.includes("/v1/ingest"))).toBe(false);
+});
+
+test("a Stop with nothing buffered is logged once, and stays quiet after a real ingest", async () => {
+  const fp = (await import("@aznex/shared")).normalizeRemoteUrl(
+    (await Bun.$`git remote get-url origin`.cwd(import.meta.dir).text()).trim(),
+  )!;
+  const { impl } = fetchRouter([fp]);
+  const logs: string[] = [];
+  const origLog = console.log;
+  console.log = (...a: unknown[]) => logs.push(a.join(" "));
+  try {
+    const pipeline = createPipeline({
+      runner: async () => JSON.stringify([FAKE_RECORD]),
+      ingest: { serviceUrl: "http://svc", apiKey: "k", fetchImpl: impl, baseDelayMs: 1 },
+    });
+    // Session that lost every PostToolUse: one line, not silence.
+    await pipeline({ hook_event_name: "Stop", session_id: "lost-1" });
+    await pipeline({ hook_event_name: "Stop", session_id: "lost-1" }); // Stop fires per turn — no repeat
+    // Session that ingested: the next prose-only turn must not warn.
+    for (const e of EVT("quiet-1")) await pipeline(e);
+    await pipeline({ hook_event_name: "Stop", session_id: "quiet-1" });
+  } finally {
+    console.log = origLog;
+  }
+  expect(logs.filter((l) => l.includes("lost-1") && l.includes("no PostToolUse event arrived")).length).toBe(1);
+  expect(logs.some((l) => l.includes("quiet-1") && l.includes("nothing buffered"))).toBe(false);
 });
