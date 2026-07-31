@@ -2,6 +2,10 @@ import { z } from "zod";
 import { AgentIdSchema } from "./schemas/session.js";
 import { MemoryTypeSchema } from "./schemas/memory.js";
 
+// One page of memories. Shared so the service and the frontend cannot disagree
+// about page count — the frontend used to hardcode this in four places.
+export const MEMORIES_PAGE_SIZE = 20;
+
 // ── Ingestion (worker → POST /v1/ingest) ─────────────────────────────────────
 
 export const IngestSessionSchema = z.object({

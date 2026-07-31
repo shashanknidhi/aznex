@@ -28,6 +28,7 @@ interface CacheEntry {
   expiresAt: number;
 }
 const cache = new Map<string, CacheEntry>();
+const DENIAL_TTL_MS = 30 * 1000;
 
 export function clearRepoAccessCache(): void {
   cache.clear();
@@ -140,7 +141,12 @@ export async function verifyRepoAccess(opts: VerifyOpts): Promise<RepoAccess> {
   if (hit && hit.expiresAt > now) return hit.value;
 
   const result = await resolve();
-  cache.set(key, { value: result, expiresAt: now + config.repoAccessTtlMs });
+  // Denials expire fast. A repo that was just added to the installation, or a
+  // membership that was just granted, otherwise stays "no access" for the full
+  // TTL — and the obvious response, pressing the button again, returns the same
+  // stale verdict without touching GitHub.
+  const ttl = result.allowed ? config.repoAccessTtlMs : Math.min(config.repoAccessTtlMs, DENIAL_TTL_MS);
+  cache.set(key, { value: result, expiresAt: now + ttl });
   return result;
 
   async function resolve(): Promise<RepoAccess> {
@@ -155,7 +161,15 @@ export async function verifyRepoAccess(opts: VerifyOpts): Promise<RepoAccess> {
       `https://api.github.com/app/installations/${repo.github_installation_id}/access_tokens`,
       { method: "POST", headers: { ...GH_HEADERS, Authorization: `Bearer ${jwt}` } },
     );
-    if (!tokenRes.ok) return { allowed: false };
+    if (!tokenRes.ok) {
+      // A revoked or suspended installation looks exactly like "no access" to
+      // every caller, so say which it was here.
+      console.warn(
+        `[repo-access] ${repo.canonical}: could not mint installation token ` +
+          `${repo.github_installation_id} (${tokenRes.status})`,
+      );
+      return { allowed: false };
+    }
     const { token } = (await tokenRes.json()) as { token: string };
 
     // 2. Is the user a collaborator on the repo? 204 = yes, 404 = no. Any other
@@ -164,6 +178,15 @@ export async function verifyRepoAccess(opts: VerifyOpts): Promise<RepoAccess> {
       `https://api.github.com/repos/${repo.canonical}/collaborators/${encodeURIComponent(user.github_login)}`,
       { headers: { ...GH_HEADERS, Authorization: `Bearer ${token}` } },
     );
+    // 404 is a real answer ("not a collaborator"). Anything else non-204 means
+    // GitHub could not answer, which is a different problem with a different
+    // fix — and it is invisible once collapsed into a boolean.
+    if (collabRes.status !== 204 && collabRes.status !== 404) {
+      console.warn(
+        `[repo-access] ${repo.canonical}: collaborator check for ${user.github_login} ` +
+          `returned ${collabRes.status} — failing closed`,
+      );
+    }
     return { allowed: collabRes.status === 204 };
   }
 }

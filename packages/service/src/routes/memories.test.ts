@@ -258,3 +258,104 @@ test("losing org membership revokes reads and the ability to delete own memories
   expect((await del(app, "/api/memories/mem_1")).status).toBe(403);
   expect(new MemoryRepository(db).getById("mem_1")).not.toBeNull();
 });
+
+// ── type filter ─────────────────────────────────────────────────────────────
+// The filter used to run in the browser over one page of results, so the count
+// contradicted the list and matches on later pages were invisible.
+
+function seedTypes() {
+  // seed(1) not seed(0): the base seed anchors mem_1, so the repo needs it.
+  const { db, app, user } = seed(1);
+  const memories = new MemoryRepository(db);
+  const types = ["decision", "decision", "negative_result", "raw_observation"] as const;
+  types.forEach((type, i) => {
+    memories.create({
+      id: `t_${i}`, repo_fingerprint: FP, session_id: null, author_id: user.id,
+      agent: "claude-code", kind: "observation", type,
+      title: null, content: `typed note ${i} about caching`, narrative: null,
+      facts: [], concepts: [], files_read: [], files_modified: [], ai_extracted: true, metadata: {},
+    });
+  });
+  return { db, app };
+}
+
+test("type filter narrows items AND total, and covers every type in the enum", async () => {
+  const { app } = seedTypes();
+  const list = async (qs: string) =>
+    (await (await get(app, `/api/memories?repo_fingerprint=${encodeURIComponent(FP)}${qs}`)).json()) as {
+      items: { type: string }[];
+      total: number;
+    };
+
+  const all = await list("");
+  expect(all.total).toBe(6); // 4 typed + mem_1 + mallory's, both extracted_learning
+
+  const decisions = await list("&type=decision");
+  expect(decisions.items).toHaveLength(2);
+  // The count must agree with the list — this is the bug the client-side filter had.
+  expect(decisions.total).toBe(2);
+  expect(decisions.items.every((m) => m.type === "decision")).toBe(true);
+
+  // raw_observation was missing from the frontend's hardcoded list entirely.
+  expect((await list("&type=raw_observation")).total).toBe(1);
+  expect((await list("&type=summary")).total).toBe(0);
+});
+
+test("type filter applies to search too, not just the unfiltered list", async () => {
+  const { app } = seedTypes();
+  const res = await get(app, `/api/memories?repo_fingerprint=${encodeURIComponent(FP)}&q=caching&type=decision`);
+  const body = (await res.json()) as { items: unknown[]; total: number };
+  expect(body.total).toBe(2);
+  expect(body.items).toHaveLength(2);
+});
+
+test("an unknown type is rejected rather than silently ignored", async () => {
+  const { app } = seedTypes();
+  const res = await get(app, `/api/memories?repo_fingerprint=${encodeURIComponent(FP)}&type=not_a_type`);
+  expect(res.status).toBe(400);
+  expect(((await res.json()) as { error: string }).error).toBe("invalid_request");
+});
+
+// ── can_delete ──────────────────────────────────────────────────────────────
+// The UI gated its delete button on `mine`, so an org admin's and a super
+// admin's documented incident-response delete had no button at all.
+
+async function canDeleteFor(app: ReturnType<typeof createApp>, token: string) {
+  const body = (await (
+    await get(app, `/api/memories?repo_fingerprint=${encodeURIComponent(FP)}`, token)
+  ).json()) as { items: { id: string; can_delete: boolean }[] };
+  return new Map(body.items.map((m) => [m.id, m.can_delete]));
+}
+
+test("can_delete: a plain member may delete only their own", async () => {
+  const { app } = seed();
+  const flags = await canDeleteFor(app, TOKEN);
+  expect(flags.get("mem_1")).toBe(true);
+  expect(flags.get("mem_mallory")).toBe(false);
+});
+
+test("can_delete: an org admin may delete anyone's in their org", async () => {
+  const { db, app } = seed();
+  const orgs = new OrgRepository(db);
+  orgs.setMember(orgs.getBySlug("acme")!.id, "alice", "admin");
+  clearRepoAccessCache();
+  const flags = await canDeleteFor(app, TOKEN);
+  expect(flags.get("mem_mallory")).toBe(true);
+});
+
+test("can_delete agrees with what DELETE actually does", async () => {
+  const { app } = seed();
+  const flags = await canDeleteFor(app, TOKEN);
+  // The whole point of the flag: never offer a button the API refuses, never
+  // hide one it would allow.
+  expect(flags.get("mem_mallory")).toBe(false);
+  expect((await del(app, "/api/memories/mem_mallory")).status).toBe(403);
+  expect(flags.get("mem_1")).toBe(true);
+  expect((await del(app, "/api/memories/mem_1")).status).toBe(200);
+});
+
+test("memory detail carries can_delete as well as the list", async () => {
+  const { app } = seed();
+  const body = (await (await get(app, "/api/memories/mem_mallory")).json()) as { can_delete: boolean };
+  expect(body.can_delete).toBe(false);
+});

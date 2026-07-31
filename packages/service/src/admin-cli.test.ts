@@ -4,7 +4,7 @@ import { join } from "path";
 import { tmpdir } from "os";
 import { openDatabase } from "./db/connection.js";
 import { createApp } from "./app.js";
-import { addOrg, addRepo, addKey } from "./admin-cli.js";
+import { addOrg, addRepo, addKey, moveRepo } from "./admin-cli.js";
 import { OrgRepository } from "./repositories/org.js";
 import { RepoRepository } from "./repositories/repo.js";
 import { GithubInstallationRepository } from "./repositories/github-installation.js";
@@ -32,6 +32,55 @@ test("addRepo refuses a repo already owned by another org", () => {
   expect(() =>
     addRepo(db, { fingerprint: "github.com/acme/api", githubRepoId: "9001", installationId: 42, orgId: b }),
   ).toThrow("another org");
+});
+
+// GitHub's numeric id is the stable identity; the fingerprint is not. Matching
+// only on fingerprint meant a renamed repo hit the github_repo_id UNIQUE
+// constraint and surfaced as an opaque "skipped" during installation sync.
+test("addRepo recognises a renamed repo by github_repo_id and adopts the new name", () => {
+  const db = openDatabase(":memory:");
+  const orgId = addOrg(db, { slug: "acme", name: "Acme", adminLogins: ["alice"] }).id;
+  const first = addRepo(db, { fingerprint: "github.com/acme/api", githubRepoId: "9001", installationId: 42, orgId });
+
+  const renamed = addRepo(db, { fingerprint: "github.com/acme/gateway", githubRepoId: "9001", installationId: 42, orgId });
+  expect(renamed.id).toBe(first.id); // same repo, and its memories stay attached
+  expect(renamed.fingerprint).toBe("github.com/acme/gateway");
+  expect(renamed.canonical).toBe("acme/gateway");
+  expect(new RepoRepository(db).getByFingerprint("github.com/acme/api")).toBeNull();
+});
+
+// Same defect, subtler trigger: fingerprints preserve the repo name's case, so a
+// case change would otherwise collide instead of matching.
+test("addRepo recognises a case-changed repo name rather than colliding", () => {
+  const db = openDatabase(":memory:");
+  const orgId = addOrg(db, { slug: "acme", name: "Acme", adminLogins: ["alice"] }).id;
+  const first = addRepo(db, { fingerprint: "github.com/acme/nodecraft", githubRepoId: "77", installationId: 42, orgId });
+  const recased = addRepo(db, { fingerprint: "github.com/acme/NodeCraft", githubRepoId: "77", installationId: 42, orgId });
+  expect(recased.id).toBe(first.id);
+  expect(recased.fingerprint).toBe("github.com/acme/NodeCraft");
+});
+
+// A repo onboarded into the wrong tenant used to be unfixable without SQL:
+// addRepo refuses to re-home, and de-boarding leaves org_id set.
+test("moveRepo re-homes a repo between orgs and reactivates it", () => {
+  const db = openDatabase(":memory:");
+  const a = addOrg(db, { slug: "acme", name: "Acme", adminLogins: ["alice"] }).id;
+  const b = addOrg(db, { slug: "beta", name: "Beta", adminLogins: ["bob"] }).id;
+  addRepo(db, { fingerprint: "github.com/acme/api", githubRepoId: "9001", installationId: 42, orgId: a });
+
+  const moved = moveRepo(db, { fingerprint: "github.com/acme/api", orgId: b });
+  expect(moved.org_id).toBe(b);
+  expect(moved.status).toBe("active");
+  // And now the other org can onboard it without the ownership throw.
+  expect(() =>
+    addRepo(db, { fingerprint: "github.com/acme/api", githubRepoId: "9001", installationId: 42, orgId: b }),
+  ).not.toThrow();
+});
+
+test("moveRepo refuses an unknown repo", () => {
+  const db = openDatabase(":memory:");
+  const orgId = addOrg(db, { slug: "acme", name: "Acme", adminLogins: ["alice"] }).id;
+  expect(() => moveRepo(db, { fingerprint: "github.com/acme/nope", orgId })).toThrow("unknown repo");
 });
 
 test("addOrg is idempotent and appoints admins", () => {

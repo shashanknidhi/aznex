@@ -6,7 +6,7 @@ import type {
   RepoMember,
   ApiKey, CreateApiKey,
   Session, CreateSession,
-  Memory, CreateMemory,
+  Memory, CreateMemory, MemoryType,
   MemoryAnchor,
   AgentEvent, CreateAgentEvent,
 } from '@aznex/shared';
@@ -45,6 +45,7 @@ export interface IRepoRepository {
   create(input: CreateRepo): Repo;
   getById(id: string): Repo | null;
   getByFingerprint(fingerprint: string): Repo | null;
+  getByGithubRepoId(githubRepoId: string): Repo | null;
   getActiveByFingerprint(fingerprint: string): Repo | null;
   update(id: string, input: Partial<CreateRepo>): Repo | null;
   listByOrgs(orgIds: string[], limit?: number): Repo[];
@@ -79,11 +80,11 @@ export interface IMemoryRepository {
   create(input: CreateMemory): Memory;
   getById(id: string): Memory | null;
   update(id: string, input: Partial<CreateMemory>): Memory | null;
-  listByRepo(repoFingerprint: string, limit?: number, offset?: number): Memory[];
-  countByRepo(repoFingerprint: string): number;
+  listByRepo(repoFingerprint: string, limit?: number, offset?: number, type?: MemoryType): Memory[];
+  countByRepo(repoFingerprint: string, type?: MemoryType): number;
   listBySession(sessionId: string): Memory[];
-  search(repoFingerprint: string, query: string, limit?: number, offset?: number): Memory[];
-  countSearch(repoFingerprint: string, query: string): number;
+  search(repoFingerprint: string, query: string, limit?: number, offset?: number, type?: MemoryType): Memory[];
+  countSearch(repoFingerprint: string, query: string, type?: MemoryType): number;
   delete(id: string): boolean;
 }
 

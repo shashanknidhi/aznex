@@ -1,7 +1,7 @@
 import { Database } from 'bun:sqlite';
 import {
   MemorySchema, CreateMemorySchema,
-  type Memory, type CreateMemory,
+  type Memory, type CreateMemory, type MemoryType,
 } from '@aznex/shared';
 import { ensureSchema } from '../db/schema.js';
 import { parseJsonArray, parseJsonObject, stringifyJson } from '../db/serde.js';
@@ -62,6 +62,16 @@ function buildFtsQuery(query: string): string {
     .join(' ');
 }
 
+// Optional type filter. Qualified as `memory.type` so the same clause works in
+// the FTS join, where `memory_fts` is also in scope.
+function typeClause(type?: MemoryType): string {
+  return type ? ' AND memory.type = ?' : '';
+}
+
+function typeArgs(type?: MemoryType): string[] {
+  return type ? [type] : [];
+}
+
 export class MemoryRepository implements IMemoryRepository {
   constructor(private db: Database) {
     ensureSchema(this.db);
@@ -118,17 +128,18 @@ export class MemoryRepository implements IMemoryRepository {
     return this.getById(id);
   }
 
-  listByRepo(repoFingerprint: string, limit = 100, offset = 0): Memory[] {
+  listByRepo(repoFingerprint: string, limit = 100, offset = 0, type?: MemoryType): Memory[] {
     const rows = this.db.prepare(
-      'SELECT * FROM memory WHERE repo_fingerprint = ? ORDER BY created_at_epoch DESC LIMIT ? OFFSET ?'
-    ).all(repoFingerprint, limit, offset) as MemoryRow[];
+      `SELECT * FROM memory WHERE repo_fingerprint = ?${typeClause(type)}
+       ORDER BY created_at_epoch DESC LIMIT ? OFFSET ?`
+    ).all(repoFingerprint, ...typeArgs(type), limit, offset) as MemoryRow[];
     return rows.map(mapRow);
   }
 
-  countByRepo(repoFingerprint: string): number {
+  countByRepo(repoFingerprint: string, type?: MemoryType): number {
     const row = this.db.prepare(
-      'SELECT COUNT(*) AS n FROM memory WHERE repo_fingerprint = ?'
-    ).get(repoFingerprint) as { n: number };
+      `SELECT COUNT(*) AS n FROM memory WHERE repo_fingerprint = ?${typeClause(type)}`
+    ).get(repoFingerprint, ...typeArgs(type)) as { n: number };
     return row.n;
   }
 
@@ -139,7 +150,7 @@ export class MemoryRepository implements IMemoryRepository {
     return rows.map(mapRow);
   }
 
-  search(repoFingerprint: string, query: string, limit = 20, offset = 0): Memory[] {
+  search(repoFingerprint: string, query: string, limit = 20, offset = 0, type?: MemoryType): Memory[] {
     const ftsQuery = buildFtsQuery(query);
     if (!ftsQuery) return [];
     const rows = this.db.prepare(`
@@ -147,14 +158,14 @@ export class MemoryRepository implements IMemoryRepository {
       FROM memory
       JOIN memory_fts ON memory_fts.memory_id = memory.id
       WHERE memory_fts.repo_fingerprint = ?
-        AND memory_fts MATCH ?
+        AND memory_fts MATCH ?${typeClause(type)}
       ORDER BY bm25(memory_fts)
       LIMIT ? OFFSET ?
-    `).all(repoFingerprint, ftsQuery, limit, offset) as MemoryRow[];
+    `).all(repoFingerprint, ftsQuery, ...typeArgs(type), limit, offset) as MemoryRow[];
     return rows.map(mapRow);
   }
 
-  countSearch(repoFingerprint: string, query: string): number {
+  countSearch(repoFingerprint: string, query: string, type?: MemoryType): number {
     const ftsQuery = buildFtsQuery(query);
     if (!ftsQuery) return 0;
     const row = this.db.prepare(`
@@ -162,8 +173,8 @@ export class MemoryRepository implements IMemoryRepository {
       FROM memory
       JOIN memory_fts ON memory_fts.memory_id = memory.id
       WHERE memory_fts.repo_fingerprint = ?
-        AND memory_fts MATCH ?
-    `).get(repoFingerprint, ftsQuery) as { n: number };
+        AND memory_fts MATCH ?${typeClause(type)}
+    `).get(repoFingerprint, ftsQuery, ...typeArgs(type)) as { n: number };
     return row.n;
   }
 

@@ -65,6 +65,14 @@ export class RepoRepository implements IRepoRepository {
     return row ? mapRow(row) : null;
   }
 
+  // GitHub's numeric id survives renames and case changes; the fingerprint does
+  // not. Onboarding looks here when the fingerprint misses, so a renamed repo is
+  // recognised instead of colliding on the github_repo_id UNIQUE constraint.
+  getByGithubRepoId(githubRepoId: string): Repo | null {
+    const row = this.db.prepare('SELECT * FROM repo WHERE github_repo_id = ?').get(githubRepoId) as RepoRow | null;
+    return row ? mapRow(row) : null;
+  }
+
   update(id: string, input: Partial<CreateRepo>): Repo | null {
     const existing = this.getById(id);
     if (!existing) return null;

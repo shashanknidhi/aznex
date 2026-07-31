@@ -11,7 +11,7 @@ import { OrgRepository } from "../repositories/org.js";
 import { RepoRepository } from "../repositories/repo.js";
 import { ApiKeyRepository } from "../repositories/api-key.js";
 import { UserRepository } from "../repositories/user.js";
-import { addRepo } from "../admin-cli.js";
+import { addRepo, RepoOwnedByAnotherOrgError } from "../admin-cli.js";
 
 // Org admin surface: everything about one tenant — its members, their API keys,
 // and its repos. Replaces the global env allowlist and the single global
@@ -28,6 +28,13 @@ const RepoBody = z.object({
   fingerprint: z.string().min(1).regex(/^[^/\s]+\/[^/\s]+\/[^/\s]+$/, "expected host/owner/name"),
 });
 const SyncBody = z.object({ installation_id: z.number().int().positive() });
+
+// Why a repo in the installation was not onboarded. "Skipped" alone sent people
+// hunting for a GitHub permissions problem they did not have.
+export type SkippedRepo =
+  | { canonical: string; reason: "no_github_access"; checked_login: string }
+  | { canonical: string; reason: "owned_by_another_org"; owner_org_name: string | null }
+  | { canonical: string; reason: "error"; detail: string };
 
 // Convention (schemas/repo.ts): lowercase host+owner, preserve repo-name case.
 function normalizeFingerprint(raw: string): { fingerprint: string; canonical: string } {
@@ -231,31 +238,54 @@ export function registerOrgRoutes(app: Hono<AppEnv>, auth: Auth | null): void {
     const parsed = SyncBody.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: "invalid_request" }, 400);
 
+    const db = c.get("db");
+    const login = c.get("user").github_login;
     try {
       const found = await listInstallationRepos(parsed.data.installation_id, loadConfig());
       const onboarded: string[] = [];
-      const skipped: string[] = [];
+      const skipped: SkippedRepo[] = [];
       for (const r of found) {
         if (!(await callerCanAccess(c, r.canonical, parsed.data.installation_id))) {
-          skipped.push(r.canonical);
+          console.warn(`[sync] skip ${r.canonical}: GitHub does not list ${login} as a collaborator`);
+          skipped.push({ canonical: r.canonical, reason: "no_github_access", checked_login: login });
           continue;
         }
-        const [owner, name] = r.canonical.split("/");
+        // Same normalizer as the single-repo route: lowercase host+owner, keep
+        // the repo name's case. Hand-rolling it here once dropped the owner
+        // lowercasing out of step with getByFingerprint's exact match.
+        const { fingerprint } = normalizeFingerprint(`github.com/${r.canonical}`);
         try {
-          addRepo(c.get("db"), {
-            fingerprint: `github.com/${owner!.toLowerCase()}/${name}`,
+          addRepo(db, {
+            fingerprint,
             githubRepoId: r.githubRepoId,
             installationId: parsed.data.installation_id,
             orgId: c.get("org").id,
           });
-          onboarded.push(`github.com/${owner!.toLowerCase()}/${name}`);
-        } catch {
-          // Already owned by another org — never silently re-home it.
-          skipped.push(r.canonical);
+          onboarded.push(fingerprint);
+        } catch (err) {
+          // Two very different failures used to land here as one opaque
+          // "skipped", and the UI blamed the user's GitHub access for both.
+          if (err instanceof RepoOwnedByAnotherOrgError) {
+            const owner = new OrgRepository(db).getById(err.ownerOrgId);
+            console.warn(`[sync] skip ${r.canonical}: already owned by org ${owner?.slug ?? err.ownerOrgId}`);
+            skipped.push({
+              canonical: r.canonical,
+              reason: "owned_by_another_org",
+              owner_org_name: owner?.name ?? null,
+            });
+          } else {
+            console.error(`[sync] skip ${r.canonical}: unexpected error`, err);
+            skipped.push({
+              canonical: r.canonical,
+              reason: "error",
+              detail: err instanceof Error ? err.message : String(err),
+            });
+          }
         }
       }
       return c.json({ onboarded, skipped });
     } catch (err) {
+      console.error(`[sync] installation ${parsed.data.installation_id} failed`, err);
       return c.json({ error: err instanceof Error ? err.message : "sync_failed" }, 400);
     }
   });
