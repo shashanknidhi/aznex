@@ -1,7 +1,8 @@
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { Navigate, useLocation } from "react-router-dom";
-import { api, authClient, setUnauthorizedHandler, type Me } from "./api.js";
+import { api, authClient, setUnauthorizedHandler, type Me, type OrgInfo } from "./api.js";
 import { Loading } from "./components/ui.js";
+import { readStoredOrg, resolveActiveOrg, writeStoredOrg } from "./org.js";
 
 /**
  * Who is signed in, fetched once from /api/me and shared.
@@ -16,6 +17,9 @@ interface SessionValue {
   error: unknown;
   loading: boolean;
   reload: () => void;
+  /** The one org the UI is scoped to; null until /api/me lands, or if you're in none. */
+  activeOrg: OrgInfo | null;
+  setActiveOrg: (id: string) => void;
 }
 
 const SessionContext = createContext<SessionValue>({
@@ -23,6 +27,8 @@ const SessionContext = createContext<SessionValue>({
   error: null,
   loading: true,
   reload: () => {},
+  activeOrg: null,
+  setActiveOrg: () => {},
 });
 
 export function useMe(): SessionValue {
@@ -46,6 +52,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const [error, setError] = useState<unknown>(null);
   const [loading, setLoading] = useState(true);
   const [nonce, setNonce] = useState(0);
+  const [orgId, setOrgId] = useState<string | null>(() => readStoredOrg());
 
   // A 401 anywhere means the cookie died. better-auth keeps serving its cached
   // session, so RequireAuth would keep letting the user through to a page where
@@ -86,9 +93,21 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     return () => controller.abort();
   }, [session, isPending, nonce]);
 
+  const setActiveOrg = useCallback((id: string) => {
+    setOrgId(id);
+    writeStoredOrg(id);
+  }, []);
+
   const value = useMemo<SessionValue>(
-    () => ({ me, error, loading: isPending || loading, reload: () => setNonce((n) => n + 1) }),
-    [me, error, isPending, loading],
+    () => ({
+      me,
+      error,
+      loading: isPending || loading,
+      reload: () => setNonce((n) => n + 1),
+      activeOrg: resolveActiveOrg(me?.orgs ?? [], orgId),
+      setActiveOrg,
+    }),
+    [me, error, isPending, loading, orgId, setActiveOrg],
   );
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
 }

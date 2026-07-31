@@ -21,7 +21,7 @@ export function Shell({
   crumbs?: Crumb[];
   children: React.ReactNode;
 }) {
-  const { me } = useMe();
+  const { me, activeOrg, setActiveOrg } = useMe();
   const { pathname } = useLocation();
   useDocumentTitle(title);
 
@@ -58,7 +58,27 @@ export function Shell({
           {me && (
             <div className="shell-identity">
               <span className="shell-login">@{me.login}</span>
-              <span className="badge badge-neutral">{roleSummary(me)}</span>
+              {/* The org the whole UI is scoped to. It used to say "org admin"
+                  while the page below listed an org you're only a member of. */}
+              {me.orgs.length > 1 ? (
+                <label className="shell-org">
+                  <span className="sr-only">Organization</span>
+                  <select
+                    value={activeOrg?.id ?? ""}
+                    onChange={(e) => setActiveOrg(e.target.value)}
+                  >
+                    {me.orgs.map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : (
+                activeOrg && <span className="shell-org-name">{activeOrg.name}</span>
+              )}
+              {activeOrg && <span className="badge badge-neutral">{activeOrg.role}</span>}
+              {me.is_super_admin && <span className="badge badge-neutral">super admin</span>}
               <button type="button" className="btn btn-ghost btn-sm" onClick={() => void signOut()}>
                 Sign out
               </button>
@@ -85,13 +105,6 @@ export function Shell({
       </main>
     </>
   );
-}
-
-function roleSummary(me: { is_super_admin: boolean; orgs: { role: string }[] }): string {
-  if (me.is_super_admin) return "super admin";
-  const admin = me.orgs.filter((o) => o.role === "admin").length;
-  if (admin > 0) return admin === 1 ? "org admin" : `admin of ${admin} orgs`;
-  return "member";
 }
 
 /** Stripped frame for the pages you reach without being signed in. */
