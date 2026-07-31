@@ -12,8 +12,31 @@ bumps stay at `0.1.x` and patch numbers carry both features and fixes.
 
 ## Unreleased
 
+## [0.1.13] — 2026-07-31
+
 ### Added
 
+- **Two GitHub accounts on one machine** (#97). Aznex checks access as *you*,
+  per repo, so a work key on a personal repo is denied and vice versa — a
+  developer with two accounts had no working setup. Keys can now be keyed by
+  GitHub owner: everything under that owner, reads and writes both, uses that
+  identity, and everything else uses the default. Nothing to switch — the
+  identity follows the repo. Manage it at <http://localhost:29639/> under
+  **Advanced — more than one GitHub account**; keys are only ever written, never
+  shown back.
+- **`aznex-worker --version`** (#99), and the daemon now logs its own version at
+  startup — it can trail the installed one until it restarts. `doctor` compares
+  against npm and warns when you are behind.
+- **One active organization** (#95). The repositories page used to stack every
+  org you belong to, with the onboarding controls sitting below the last one and
+  nothing at the point of action naming where a repo would land. You now pick an
+  active org in the header (remembered across visits) and the page, the onboard
+  form and `/github/setup` all name it.
+- **`GET /api/config` and `GET /api/me`** (#94), so a misconfigured deployment
+  stops being indistinguishable from an empty one, plus `can_delete` per memory
+  so the documented admin deletion path has a UI.
+- **`admin-cli move-repo`** (#94) — re-homing a repo onboarded into the wrong
+  tenant previously required direct SQL.
 - Published the full setup guide as `docs/setup.md`. It had only ever existed on
   one maintainer's machine, excluded from git, so nobody outside the pilot team
   could read it.
@@ -30,8 +53,44 @@ bumps stay at `0.1.x` and patch numbers carry both features and fixes.
 - Documented that removing an org member does **not** revoke their API keys, and
   the `org` / `org_membership` state machines in `docs/data-lifecycle.md`.
 
+### Changed
+
+- **The GitHub App now needs the `Members: read` organization permission**
+  (#96), granted on the App and then approved by each org's owner on their
+  installation. Without it GitHub hides org-derived access (team membership,
+  default member permission, org ownership) from the collaborator check, so org
+  members were told they were not collaborators. Personal-account installations
+  are unaffected. No change to the security model: collaborator membership is
+  still the gate and permission level is still never trusted.
+
 ### Fixed
 
+- **A session is no longer lost when the extraction model answers in prose**
+  (#98). Both engines are chat models asked to reply with JSON, not JSON-mode
+  APIs, so a preamble like "Based on the session transcript…" is a normal
+  output — but it crashed parsing and took the whole session with it, logging a
+  stack trace that read like the daemon had died. The reply is now unwrapped
+  from a preamble or a code fence, and a genuinely unusable answer drops that
+  one session with a warning naming the session and repo.
+- **Org members are no longer reported as strangers** (#96). A repo owned by an
+  organization could tell an org owner that GitHub doesn't list them as a
+  collaborator, pointing at a list that was already correct. The denial now
+  names the missing App permission and who has to approve it. A repo's own owner
+  is allowed without a round trip — you cannot fail your own access check.
+- **"Skipped (you don't have GitHub access)" no longer covers unrelated
+  failures** (#94). Two different causes were pushed into one array, so the
+  response could not tell them apart and nothing was logged. Sync now reports
+  which login was checked, or that the repo is owned by another org, or that the
+  check errored.
+- **A renamed or re-cased repo reactivates instead of silently failing** (#94) —
+  `addRepo` matches on the GitHub repo id as well as the fingerprint, rather
+  than colliding on a UNIQUE constraint and surfacing as another opaque "skip".
+- **A filtered memory list no longer contradicts its own count** (#94). The type
+  filter ran client-side over one page of 20 while the total was global, hiding
+  matches on later pages; it is now applied server-side.
+- **The header role badge matches the page** (#95) — it showed `org admin` while
+  the page below showed you as a member. It now reflects the active org, and
+  `super admin` is its own badge.
 - `.env.example` advertised `AZNEX_ALLOWED_GITHUB_LOGINS` as a live
   authentication allowlist. No code has read it since org membership replaced it
   in 0.1.12. Removed, and the `AZNEX_ADMIN_GITHUB_LOGINS` description corrected
@@ -252,6 +311,7 @@ First published release — the Phase 1 MVP, end to end.
   — frontend tests and build, Docker image job, lockfile fix (#46); Railway
   deployment with same-origin SPA and admin onboarding CLI (#43).
 
+[0.1.13]: https://github.com/shashanknidhi/aznex/releases/tag/v0.1.13
 [0.1.12]: https://github.com/shashanknidhi/aznex/releases/tag/v0.1.12
 [0.1.11]: https://github.com/shashanknidhi/aznex/releases/tag/v0.1.11
 [0.1.10]: https://github.com/shashanknidhi/aznex/releases/tag/v0.1.10
