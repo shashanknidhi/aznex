@@ -12,6 +12,21 @@ bumps stay at `0.1.x` and patch numbers carry both features and fixes.
 
 ## Unreleased
 
+## [0.1.14] — 2026-07-31
+
+### Fixed
+
+- **A session that captures nothing now says so** (#101). A session whose hook
+  events never arrived looked exactly like one that never happened. The worker
+  now tells the two apart — "no tool events arrived" versus "every event was
+  filtered as noise" — once per session, and stays quiet for a session that
+  already ingested. Dropped hook events land in `~/.aznex/logs/hook.log`
+  instead of vanishing into an empty `catch`; the hook still exits 0 and never
+  stalls the agent.
+- **No more "Untitled memory"** (#101). Extraction now requires a `title`, and
+  the memory detail page drops the heading for older title-less rows instead of
+  printing a placeholder above the real text.
+
 ## [0.1.13] — 2026-07-31
 
 ### Added
@@ -311,6 +326,7 @@ First published release — the Phase 1 MVP, end to end.
   — frontend tests and build, Docker image job, lockfile fix (#46); Railway
   deployment with same-origin SPA and admin onboarding CLI (#43).
 
+[0.1.14]: https://github.com/shashanknidhi/aznex/releases/tag/v0.1.14
 [0.1.13]: https://github.com/shashanknidhi/aznex/releases/tag/v0.1.13
 [0.1.12]: https://github.com/shashanknidhi/aznex/releases/tag/v0.1.12
 [0.1.11]: https://github.com/shashanknidhi/aznex/releases/tag/v0.1.11
