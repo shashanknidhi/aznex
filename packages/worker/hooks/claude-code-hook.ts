@@ -7,7 +7,8 @@
 //   context        → POST /context       SessionStart injection; body relayed to stdout
 //   file-context   → POST /file-context  PreToolUse(Read) injection; body relayed to stdout
 
-import { appendFileSync } from "fs";
+import { appendFileSync, existsSync, renameSync, statSync } from "fs";
+import { rotateIfNeeded } from "../daemon/templates.js";
 
 const TIMEOUTS_MS: Record<string, number> = { hook: 2000, context: 5000, "file-context": 2000 };
 
@@ -18,6 +19,11 @@ function logDrop(endpoint: string, err: unknown): void {
   try {
     const line = `${new Date().toISOString()} hook ${endpoint} dropped — ${err instanceof Error ? err.message : err}\n`;
     const path = `${process.env["HOME"]}/.aznex/logs/hook.log`;
+    // A down worker means one line per hook event, so this grows faster than
+    // any other log we own. Same cap and one-generation policy as worker.log.
+    // Safe to rename here (unlike the daemon's stdout): each hook is its own
+    // short-lived process holding no long-open handle on the file.
+    if (existsSync(path)) rotateIfNeeded(statSync(path).size, renameSync, path);
     appendFileSync(path, line);
   } catch {
     // No home, no logs dir, read-only disk — logging must never break the hook.
