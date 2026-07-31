@@ -45,3 +45,39 @@ test("unconfigured → JSON-RPC error pointing at setup, preserving the request 
   expect(parsed.id).toBe(7);
   expect(parsed.error.message).toContain("aznex-worker setup");
 });
+
+test("reads go out as the identity that owns the repo the proxy runs in", async () => {
+  const { mkdtempSync } = await import("fs");
+  const dir = mkdtempSync(join(tmpdir(), "aznex-proxy-repo-"));
+  await Bun.$`git init -q`.cwd(dir).quiet();
+  await Bun.$`git remote add origin https://github.com/ukumi-ai/thing.git`.cwd(dir).quiet();
+
+  let auth = "";
+  await proxyLine('{"jsonrpc":"2.0","id":1,"method":"tools/list"}', {
+    cwd: dir,
+    configPath: tmpConfig({ serviceUrl: "https://svc", apiKey: "axk_personal", apiKeys: { "ukumi-ai": "axk_work" } }),
+    fetchImpl: (async (_url: unknown, init?: RequestInit) => {
+      auth = (init?.headers as Record<string, string>)["Authorization"]!;
+      return new Response('{"jsonrpc":"2.0","id":1,"result":{}}');
+    }) as unknown as typeof fetch,
+  });
+  expect(auth).toBe("Bearer axk_work");
+});
+
+test("a repo with no per-owner key falls back to the default identity", async () => {
+  const { mkdtempSync } = await import("fs");
+  const dir = mkdtempSync(join(tmpdir(), "aznex-proxy-repo-"));
+  await Bun.$`git init -q`.cwd(dir).quiet();
+  await Bun.$`git remote add origin https://github.com/shashanknidhi/thing.git`.cwd(dir).quiet();
+
+  let auth = "";
+  await proxyLine('{"jsonrpc":"2.0","id":1,"method":"tools/list"}', {
+    cwd: dir,
+    configPath: tmpConfig({ serviceUrl: "https://svc", apiKey: "axk_personal", apiKeys: { "ukumi-ai": "axk_work" } }),
+    fetchImpl: (async (_url: unknown, init?: RequestInit) => {
+      auth = (init?.headers as Record<string, string>)["Authorization"]!;
+      return new Response('{"jsonrpc":"2.0","id":1,"result":{}}');
+    }) as unknown as typeof fetch,
+  });
+  expect(auth).toBe("Bearer axk_personal");
+});

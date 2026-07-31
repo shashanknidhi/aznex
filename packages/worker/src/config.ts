@@ -15,6 +15,7 @@ export type ExtractAgent = "auto" | "claude" | "codex";
 export interface WorkerConfig {
   serviceUrl: string | null;
   apiKey: string | null;
+  apiKeys: Record<string, string>;
   workerPort: number;
   claudePath: string | null;
   codexPath: string | null;
@@ -28,6 +29,7 @@ export interface WorkerConfig {
 export interface ConfigFile {
   serviceUrl?: string;
   apiKey?: string;
+  apiKeys?: Record<string, string>;
   workerPort?: number;
   claudePath?: string;
   codexPath?: string;
@@ -44,6 +46,26 @@ const EXTRACT_AGENTS: readonly ExtractAgent[] = ["auto", "claude", "codex"];
 // engine that doesn't exist — fall back to auto-detection instead.
 function parseExtractAgent(value: unknown): ExtractAgent | null {
   return EXTRACT_AGENTS.includes(value as ExtractAgent) ? (value as ExtractAgent) : null;
+}
+
+// GitHub owner names are case-insensitive; a hand-edited config that says
+// "Ukumi-AI" must still match the "ukumi-ai" in a fingerprint.
+function normalizeApiKeys(raw: unknown): Record<string, string> {
+  if (!raw || typeof raw !== "object") return {};
+  const out: Record<string, string> = {};
+  for (const [owner, key] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof key === "string" && key !== "") out[owner.toLowerCase()] = key;
+  }
+  return out;
+}
+
+/**
+ * Pick the API key to use for a repo. `fingerprint` is `host/owner/name`; an
+ * owner with its own key wins, otherwise the default `apiKey` applies.
+ */
+export function resolveApiKey(config: WorkerConfig, fingerprint: string | null): string | null {
+  const owner = fingerprint?.split("/")[1]?.toLowerCase();
+  return (owner ? config.apiKeys[owner] : undefined) ?? config.apiKey;
 }
 
 /**
@@ -77,6 +99,12 @@ export function loadWorkerConfig(configPath = CONFIG_PATH): WorkerConfig {
   return {
     serviceUrl: process.env["AZNEX_SERVICE_URL"] ?? file.serviceUrl ?? null,
     apiKey: process.env["AZNEX_API_KEY"] ?? file.apiKey ?? null,
+    // Per-repo-owner keys, for a machine with more than one GitHub account:
+    // {"apiKeys": {"ukumi-ai": "axk_work"}} sends anything under that owner as
+    // the work identity, everything else as the default apiKey. Keyed by owner
+    // rather than a "current account" toggle because the right identity is a
+    // property of the repo, not of whatever you last switched to.
+    apiKeys: normalizeApiKeys(file.apiKeys),
     // 29639 = "AZNEX" on a phone keypad — high registered range, clear of the
     // 3000-3010 dev-server belt where collisions are silent and confusing.
     workerPort: Number(process.env["AZNEX_WORKER_PORT"] ?? file.workerPort ?? 29639),

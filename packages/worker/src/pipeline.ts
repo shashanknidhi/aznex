@@ -4,7 +4,7 @@ import { compressToolEvent, type RawObservation, type ToolEvent } from "./compre
 import { extractMemories, type ExtractionRunner } from "./extract.js";
 import { scrubContent } from "./scrub.js";
 import { postIngest, type IngestClientOptions } from "./ingest-client.js";
-import { loadWorkerConfig } from "./config.js";
+import { loadWorkerConfig, resolveApiKey } from "./config.js";
 
 // Full write pipeline (#16, #18–#21): PostToolUse events are compressed and
 // buffered per session; Stop triggers extract → scrub → POST /v1/ingest.
@@ -21,19 +21,28 @@ interface SessionBuffer {
 export interface PipelineDeps {
   runner?: ExtractionRunner;
   ingest?: Partial<IngestClientOptions>;
+  configPath?: string;
 }
 
 const ONBOARDED_TTL_MS = 5 * 60_000;
 
 export function createPipeline(deps: PipelineDeps = {}) {
   const sessions = new Map<string, SessionBuffer>();
-  const onboarded = { fingerprints: new Set<string>(), fetchedAtMs: 0, everFetched: false };
+  // Cached per API key: /api/repos answers for the calling identity, so a
+  // machine with a work key and a personal key gets two different lists and
+  // one shared cache would hide each account's repos from the other.
+  const onboardedByKey = new Map<string, { fingerprints: Set<string>; fetchedAtMs: number; everFetched: boolean }>();
 
   // Gate BEFORE extraction: LLM calls for repos the service will 403 anyway
   // are pure quota burn (hooks are global — every session on the machine
   // fires them). Fails open when the list can't be fetched.
   async function isOnboarded(fingerprint: string, serviceUrl: string, apiKey: string): Promise<boolean> {
     const doFetch = deps.ingest?.fetchImpl ?? fetch;
+    let onboarded = onboardedByKey.get(apiKey);
+    if (!onboarded) {
+      onboarded = { fingerprints: new Set<string>(), fetchedAtMs: 0, everFetched: false };
+      onboardedByKey.set(apiKey, onboarded);
+    }
     if (Date.now() - onboarded.fetchedAtMs > ONBOARDED_TTL_MS) {
       try {
         const res = await doFetch(`${serviceUrl}/api/repos`, {
@@ -64,9 +73,9 @@ export function createPipeline(deps: PipelineDeps = {}) {
       return;
     }
 
-    const config = loadWorkerConfig();
+    const config = loadWorkerConfig(deps.configPath);
     const serviceUrl = deps.ingest?.serviceUrl ?? config.serviceUrl;
-    const apiKey = deps.ingest?.apiKey ?? config.apiKey;
+    const apiKey = deps.ingest?.apiKey ?? resolveApiKey(config, fingerprint);
     if (!serviceUrl || !apiKey) {
       console.warn(`session ${sessionId} (${fingerprint}): service URL / API key not configured — skipping extraction`);
       return;

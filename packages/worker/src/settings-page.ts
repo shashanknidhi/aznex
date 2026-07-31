@@ -16,8 +16,16 @@ export const SETTINGS_PAGE = `<!doctype html>
   input[type=text], input[type=number], select { width: 100%; padding: .4rem; box-sizing: border-box; }
   .hint { font-size: .85rem; opacity: .7; margin: .15rem 0 0; }
   .env { color: #b45309; }
+  input[type=password] { width: 100%; padding: .4rem; box-sizing: border-box; }
   button { margin-top: 1.5rem; padding: .5rem 1.5rem; }
-  #status { margin-left: 1rem; }
+  #status, #accountStatus { margin-left: 1rem; }
+  details { margin-top: 2.5rem; border-top: 1px solid currentColor; padding-top: 1rem; }
+  summary { cursor: pointer; font-weight: 600; }
+  #accounts { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+  #accounts td { padding: .3rem 0; }
+  #accounts td:last-child { text-align: right; }
+  #accounts button { margin: 0; padding: .2rem .6rem; }
+  code { font-size: .9em; }
 </style>
 </head>
 <body>
@@ -48,6 +56,22 @@ export const SETTINGS_PAGE = `<!doctype html>
 
   <button type="submit">Save</button><span id="status"></span>
 </form>
+
+<details id="advanced">
+<summary>Advanced — more than one GitHub account</summary>
+<p class="hint">Aznex checks access as you, per repo, so a work key on a personal repo is denied and vice versa. Give a GitHub owner its own key and every repo under it — reads and writes both — uses that identity. Everything else uses the default. Nothing to switch: the identity follows the repo.</p>
+<table id="accounts"><tbody></tbody></table>
+<label>GitHub owner
+  <input type="text" id="newOwner" placeholder="acme-inc" autocomplete="off">
+</label>
+<p class="hint">The <code>owner</code> in <code>github.com/owner/repo</code> — an organization or a personal account.</p>
+<label>API key for that account
+  <input type="password" id="newKey" placeholder="axk_…" autocomplete="off">
+</label>
+<p class="hint">Mint one with <code>aznex-worker setup --new-key</code> while signed into that GitHub account in your browser, then put your original key back as the default. That account must already be a member of the Aznex org that owns the repos.</p>
+<button type="button" id="addAccount">Add account</button><span id="accountStatus"></span>
+</details>
+
 <script>
 const form = document.getElementById("form");
 const fields = ["extractAgent", "extractModel", "contextEnabled", "contextMemoryCount", "fileContextEnabled"];
@@ -68,8 +92,57 @@ function fillModels(selected) {
   if (models.some((m) => m.id === selected)) form.elements["extractModel"].value = selected;
 }
 
+// Owner names come straight from the config file, which is hand-editable, so
+// they're written as text nodes rather than innerHTML.
+function accountRow(owner, state, onRemove) {
+  const tr = document.createElement("tr");
+  const name = document.createElement("td");
+  name.textContent = owner;
+  const key = document.createElement("td");
+  key.textContent = state;
+  const action = document.createElement("td");
+  if (onRemove) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = "Remove";
+    button.addEventListener("click", onRemove);
+    action.append(button);
+  }
+  tr.append(name, key, action);
+  return tr;
+}
+
+function renderAccounts(accounts) {
+  const body = document.querySelector("#accounts tbody");
+  body.textContent = "";
+  body.append(accountRow("every other repo", accounts.hasDefault ? "default key" : "not configured", null));
+  for (const owner of accounts.owners) {
+    body.append(accountRow(owner, "own key", () => saveAccounts({ [owner]: null }, \`removed \${owner}\`)));
+  }
+  // Only worth unfolding on its own if you already use it.
+  if (accounts.owners.length > 0) document.getElementById("advanced").open = true;
+}
+
+async function saveAccounts(patch, okMessage) {
+  const status = document.getElementById("accountStatus");
+  const res = await fetch("/api/settings", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ apiKeys: patch }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    status.textContent = data.detail ?? "save failed";
+    return false;
+  }
+  status.textContent = okMessage;
+  renderAccounts(data.accounts);
+  return true;
+}
+
 function render(data) {
   document.getElementById("serviceUrl").textContent = data.effective.serviceUrl ?? "not configured — run: npx aznex-worker setup";
+  renderAccounts(data.accounts);
   catalog = data.models;
   activeEngine = data.activeEngine;
   form.elements["extractAgent"].value = data.effective.extractAgent;
@@ -87,6 +160,19 @@ function render(data) {
 }
 
 fetch("/api/settings").then(r => r.json()).then(render);
+
+document.getElementById("addAccount").addEventListener("click", async () => {
+  const owner = document.getElementById("newOwner");
+  const key = document.getElementById("newKey");
+  if (owner.value.trim() === "" || key.value === "") {
+    document.getElementById("accountStatus").textContent = "owner and key are both required";
+    return;
+  }
+  if (await saveAccounts({ [owner.value.trim()]: key.value }, \`saved \${owner.value.trim()} ✓\`)) {
+    owner.value = "";
+    key.value = ""; // don't leave a usable credential sitting in the form
+  }
+});
 
 form.elements["extractAgent"].addEventListener("change", () => {
   fillModels(form.elements["extractModel"].value);

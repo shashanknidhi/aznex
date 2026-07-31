@@ -19,6 +19,13 @@ test("getSettings never exposes the apiKey", () => {
   expect(out.effective["serviceUrl"]).toBe("https://svc");
 });
 
+test("getSettings never exposes the per-owner apiKeys either", () => {
+  const path = tmpConfig({ serviceUrl: "https://svc", apiKey: "axk_a", apiKeys: { "ukumi-ai": "axk_work" } });
+  const out = getSettings(path) as { effective: Record<string, unknown> };
+  expect(JSON.stringify(out)).not.toContain("axk_work");
+  expect(out.effective["apiKeys"]).toBeUndefined();
+});
+
 test("updateSettings roundtrips editable fields and preserves setup-owned ones", () => {
   const path = tmpConfig({ serviceUrl: "https://svc", apiKey: "axk_secret", claudePath: "/opt/claude" });
   updateSettings({ extractModel: "claude-haiku-4-5", contextMemoryCount: 5, contextEnabled: false }, path);
@@ -89,4 +96,72 @@ test("envOverridden flags fields pinned by env vars", () => {
   } finally {
     delete process.env["AZNEX_EXTRACT_MODEL"];
   }
+});
+
+// ── per-owner accounts, editable from the settings page ─────────────────────
+
+const KEYED = { serviceUrl: "https://svc", apiKey: "axk_personal_aaaa", apiKeys: { "ukumi-ai": "axk_work_bbbb" } };
+
+function accountsOf(path: string): { hasDefault: boolean; owners: string[] } {
+  return (getSettings(path) as { accounts: ReturnType<typeof accountsOf> }).accounts;
+}
+
+test("getSettings lists the owners that have their own identity, never their keys", () => {
+  const accounts = accountsOf(tmpConfig(KEYED));
+  expect(accounts).toEqual({ hasDefault: true, owners: ["ukumi-ai"] });
+});
+
+test("getSettings reports no default key before setup has run", () => {
+  expect(accountsOf(tmpConfig({ serviceUrl: "https://svc" })).hasDefault).toBe(false);
+});
+
+test("adding an account writes the key and lowercases the owner", () => {
+  const path = tmpConfig(KEYED);
+  updateSettings({ apiKeys: { "Acme-Inc": "axk_acme" } }, path);
+  const file = JSON.parse(readFileSync(path, "utf-8"));
+  expect(file["apiKeys"]).toEqual({ "ukumi-ai": "axk_work_bbbb", "acme-inc": "axk_acme" }); // patch, not replace
+  expect(statSync(path).mode & 0o777).toBe(0o600);
+});
+
+test("removing an account drops just that owner", () => {
+  const path = tmpConfig({ ...KEYED, apiKeys: { "ukumi-ai": "axk_work_bbbb", acme: "axk_acme" } });
+  updateSettings({ apiKeys: { acme: null } }, path);
+  const file = JSON.parse(readFileSync(path, "utf-8"));
+  expect(file["apiKeys"]).toEqual({ "ukumi-ai": "axk_work_bbbb" });
+  expect(file["apiKey"]).toBe("axk_personal_aaaa"); // the default is never touched
+});
+
+test("removing the last account leaves no empty apiKeys behind", () => {
+  const path = tmpConfig(KEYED);
+  updateSettings({ apiKeys: { "ukumi-ai": null } }, path);
+  expect(JSON.parse(readFileSync(path, "utf-8"))["apiKeys"]).toBeUndefined();
+});
+
+test("the response after a save contains no key material at all", () => {
+  const out = updateSettings({ apiKeys: { acme: "axk_acme_secret" } }, tmpConfig(KEYED));
+  expect(JSON.stringify(out)).not.toContain("axk_");
+});
+
+test("an invalid owner name is rejected rather than saved as a rule that never matches", () => {
+  const path = tmpConfig(KEYED);
+  for (const owner of ["acme inc", "acme/repo", "-acme", "acme--inc", "", "a".repeat(40)]) {
+    expect(() => updateSettings({ apiKeys: { [owner]: "axk_x" } }, path)).toThrow(InvalidSettingError);
+  }
+  expect(JSON.parse(readFileSync(path, "utf-8"))["apiKeys"]).toEqual({ "ukumi-ai": "axk_work_bbbb" });
+});
+
+test("a pasted key with whitespace is rejected instead of becoming an unexplained 401", () => {
+  expect(() => updateSettings({ apiKeys: { acme: "axk_x " } }, tmpConfig(KEYED))).toThrow(InvalidSettingError);
+  expect(() => updateSettings({ apiKeys: { acme: "axk_ x" } }, tmpConfig(KEYED))).toThrow(InvalidSettingError);
+});
+
+test("a non-object apiKeys payload is rejected", () => {
+  expect(() => updateSettings({ apiKeys: "axk_x" }, tmpConfig(KEYED))).toThrow(InvalidSettingError);
+  expect(() => updateSettings({ apiKeys: ["axk_x"] }, tmpConfig(KEYED))).toThrow(InvalidSettingError);
+});
+
+test("saving other settings leaves the accounts alone", () => {
+  const path = tmpConfig(KEYED);
+  updateSettings({ contextMemoryCount: 5 }, path);
+  expect(JSON.parse(readFileSync(path, "utf-8"))["apiKeys"]).toEqual({ "ukumi-ai": "axk_work_bbbb" });
 });

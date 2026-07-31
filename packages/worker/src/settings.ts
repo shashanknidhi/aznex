@@ -25,8 +25,10 @@ const ENV_FOR: Partial<Record<EditableKey, string>> = {
   extractModel: "AZNEX_EXTRACT_MODEL",
 };
 
-function withoutSecrets(config: WorkerConfig): Omit<WorkerConfig, "apiKey"> {
-  const { apiKey: _apiKey, ...rest } = config;
+// Both key fields are credentials: apiKeys holds one per GitHub account, so
+// omitting it is not cosmetic — the page would otherwise render them.
+function withoutSecrets(config: WorkerConfig): Omit<WorkerConfig, "apiKey" | "apiKeys"> {
+  const { apiKey: _apiKey, apiKeys: _apiKeys, ...rest } = config;
   return rest;
 }
 
@@ -53,6 +55,14 @@ export function getSettings(configPath = CONFIG_PATH): object {
       // The page renders a <select>, so it needs a concrete id rather than the
       // null that means "whatever's cheapest".
       extractModel: resolveModel(engine, config.extractModel),
+    },
+    // Which owners have their own identity, and whether the fallback key is
+    // set. Owner names only — not even a masked key, because the prefix is a
+    // fixed scheme and the rest is live credential. The owner is what the user
+    // needs to see; the key is only ever written.
+    accounts: {
+      hasDefault: config.apiKey !== null,
+      owners: Object.keys(config.apiKeys).sort(),
     },
     // catalog for the dropdowns — the page holds no model list of its own
     models: MODELS,
@@ -88,6 +98,44 @@ function validate(body: Record<string, unknown>, stored: WorkerConfig, configPat
   }
 }
 
+// GitHub logins are alphanumeric with single hyphens, max 39 chars. Anything
+// else is a typo that would silently never match a fingerprint.
+const OWNER_RE = /^[a-z\d](?:[a-z\d]|-(?=[a-z\d])){0,38}$/i;
+
+/**
+ * Apply an `{owner: key | null}` patch to the per-owner keys. A key adds or
+ * replaces that owner's identity; null removes it. Patch rather than replace
+ * so the page never has to send back keys it was only shown masked.
+ */
+function applyApiKeysPatch(patch: unknown, file: Record<string, unknown>): void {
+  if (typeof patch !== "object" || patch === null || Array.isArray(patch)) {
+    throw new InvalidSettingError("apiKeys must be an object of {owner: key}");
+  }
+  const existing = (typeof file["apiKeys"] === "object" && file["apiKeys"] !== null
+    ? { ...(file["apiKeys"] as Record<string, unknown>) }
+    : {}) as Record<string, unknown>;
+
+  for (const [rawOwner, value] of Object.entries(patch as Record<string, unknown>)) {
+    const owner = rawOwner.trim().toLowerCase();
+    if (!OWNER_RE.test(owner)) {
+      throw new InvalidSettingError(`${JSON.stringify(rawOwner)} is not a valid GitHub owner name`);
+    }
+    if (value === null || value === "") {
+      delete existing[owner];
+      continue;
+    }
+    // Whitespace here is a paste artefact that would produce a 401 the user
+    // can't see the cause of, so reject rather than silently trim.
+    if (typeof value !== "string" || value !== value.trim() || /\s/.test(value)) {
+      throw new InvalidSettingError(`API key for ${owner} must be a string with no whitespace`);
+    }
+    existing[owner] = value;
+  }
+
+  if (Object.keys(existing).length === 0) delete file["apiKeys"];
+  else file["apiKeys"] = existing;
+}
+
 export function updateSettings(body: Record<string, unknown>, configPath = CONFIG_PATH): object {
   validate(body, loadWorkerConfig(configPath), configPath);
 
@@ -106,6 +154,9 @@ export function updateSettings(body: Record<string, unknown>, configPath = CONFI
     if (value === null || value === "") delete file[key];
     else file[key] = value;
   }
+  // apiKeys is deliberately outside EDITABLE: it holds credentials, so it is
+  // patched by owner rather than overwritten wholesale, and never read back.
+  if ("apiKeys" in body) applyApiKeysPatch(body["apiKeys"], file);
   mkdirSync(dirname(configPath), { recursive: true });
   writeFileSync(configPath, JSON.stringify(file, null, 2) + "\n");
   chmodSync(configPath, 0o600); // may hold the apiKey

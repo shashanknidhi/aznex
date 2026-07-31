@@ -1,4 +1,7 @@
 import { test, expect } from "bun:test";
+import { mkdtempSync, writeFileSync } from "fs";
+import { join } from "path";
+import { tmpdir } from "os";
 import { IngestRequestSchema } from "@aznex/shared";
 import { compressToolEvent, SKIP_TOOLS } from "./compress.js";
 import { scrubContent } from "./scrub.js";
@@ -341,4 +344,104 @@ test("ingest failure is logged with session+repo and does not throw", async () =
   } finally {
     console.warn = origWarn;
   }
+});
+
+// ── per-owner API keys (two GitHub accounts on one machine) ──────────────────
+
+// A throwaway repo whose origin is owned by `owner`, so the pipeline resolves
+// a fingerprint we can map to a second identity.
+async function repoOwnedBy(owner: string): Promise<string> {
+  const { mkdtempSync } = await import("fs");
+  const dir = mkdtempSync(join(tmpdir(), "aznex-repo-"));
+  await Bun.$`git init -q`.cwd(dir).quiet();
+  await Bun.$`git remote add origin https://github.com/${owner}/thing.git`.cwd(dir).quiet();
+  return dir;
+}
+
+function keyedConfig(patch: object): string {
+  const path = join(mkdtempSync(join(tmpdir(), "aznex-pipe-cfg-")), "config.json");
+  writeFileSync(path, JSON.stringify(patch));
+  return path;
+}
+
+// Records the bearer token of every call, and answers /api/repos per identity.
+function identityRouter(reposByKey: Record<string, string[]>) {
+  const seen: { url: string; key: string }[] = [];
+  const impl = (async (url: unknown, init?: RequestInit) => {
+    const u = String(url);
+    const key = ((init?.headers as Record<string, string>)["Authorization"] ?? "").replace("Bearer ", "");
+    seen.push({ url: u, key });
+    if (u.endsWith("/api/repos")) {
+      const repos = (reposByKey[key] ?? []).map((fingerprint) => ({ fingerprint }));
+      return new Response(JSON.stringify({ repos }), { status: 200 });
+    }
+    return new Response(JSON.stringify({ accepted: 1, rejected: [] }), { status: 202 });
+  }) as unknown as typeof fetch;
+  return { impl, seen };
+}
+
+test("a repo under a mapped owner ingests as that owner's identity", async () => {
+  const dir = await repoOwnedBy("ukumi-ai");
+  const { impl, seen } = identityRouter({ axk_work: ["github.com/ukumi-ai/thing"] });
+  const pipeline = createPipeline({
+    runner: async () => JSON.stringify([FAKE_RECORD]),
+    configPath: keyedConfig({
+      serviceUrl: "http://svc",
+      apiKey: "axk_personal",
+      apiKeys: { "ukumi-ai": "axk_work" },
+    }),
+    ingest: { fetchImpl: impl, baseDelayMs: 1 },
+  });
+  await pipeline({ hook_event_name: "PostToolUse", session_id: "own-1", cwd: dir, tool_name: "Edit", tool_input: { file_path: "a.ts" }, tool_response: "ok" });
+  await pipeline({ hook_event_name: "Stop", session_id: "own-1" });
+
+  const ingest = seen.find((c) => c.url.includes("/v1/ingest"));
+  expect(ingest?.key).toBe("axk_work"); // never the personal key
+  expect(seen.every((c) => c.key === "axk_work")).toBe(true); // gate check too
+});
+
+test("an unmapped owner still ingests as the default identity", async () => {
+  const dir = await repoOwnedBy("shashanknidhi");
+  const { impl, seen } = identityRouter({ axk_personal: ["github.com/shashanknidhi/thing"] });
+  const pipeline = createPipeline({
+    runner: async () => JSON.stringify([FAKE_RECORD]),
+    configPath: keyedConfig({
+      serviceUrl: "http://svc",
+      apiKey: "axk_personal",
+      apiKeys: { "ukumi-ai": "axk_work" },
+    }),
+    ingest: { fetchImpl: impl, baseDelayMs: 1 },
+  });
+  await pipeline({ hook_event_name: "PostToolUse", session_id: "own-2", cwd: dir, tool_name: "Edit", tool_input: { file_path: "a.ts" }, tool_response: "ok" });
+  await pipeline({ hook_event_name: "Stop", session_id: "own-2" });
+
+  expect(seen.find((c) => c.url.includes("/v1/ingest"))?.key).toBe("axk_personal");
+});
+
+test("the onboarded-repo cache is per identity, so one account's list can't hide the other's repos", async () => {
+  const personalDir = await repoOwnedBy("shashanknidhi");
+  const workDir = await repoOwnedBy("ukumi-ai");
+  // Each key sees only its own repo — a shared cache would make the second
+  // session look non-onboarded and silently drop it.
+  const { impl, seen } = identityRouter({
+    axk_personal: ["github.com/shashanknidhi/thing"],
+    axk_work: ["github.com/ukumi-ai/thing"],
+  });
+  const pipeline = createPipeline({
+    runner: async () => JSON.stringify([FAKE_RECORD]),
+    configPath: keyedConfig({
+      serviceUrl: "http://svc",
+      apiKey: "axk_personal",
+      apiKeys: { "ukumi-ai": "axk_work" },
+    }),
+    ingest: { fetchImpl: impl, baseDelayMs: 1 },
+  });
+  for (const [sid, cwd] of [["cache-1", personalDir], ["cache-2", workDir]] as const) {
+    await pipeline({ hook_event_name: "PostToolUse", session_id: sid, cwd, tool_name: "Edit", tool_input: { file_path: "a.ts" }, tool_response: "ok" });
+    await pipeline({ hook_event_name: "Stop", session_id: sid });
+  }
+
+  const ingests = seen.filter((c) => c.url.includes("/v1/ingest")).map((c) => c.key);
+  expect(ingests).toEqual(["axk_personal", "axk_work"]); // both got through
+  expect(seen.filter((c) => c.url.endsWith("/api/repos")).length).toBe(2); // one fetch per identity
 });

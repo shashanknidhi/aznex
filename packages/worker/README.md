@@ -105,6 +105,45 @@ the file since it never sees your shell env.
 | `AZNEX_EXTRACT_AGENT` | `auto` | Which CLI runs extraction: `auto` (Claude Code, else Codex), `claude`, or `codex`. An explicit value fails loud if that CLI is missing. |
 | `AZNEX_EXTRACT_MODEL` | cheapest for the agent | Model passed as `--model`. Must be one the settings page lists for the active agent — `claude-haiku-4-5` for Claude Code, `gpt-5.6-luna` for Codex. |
 
+## Two GitHub accounts on one machine
+
+Aznex checks access as *you*, per repo — a work key on a personal repo is
+denied and vice versa. If you use two GitHub accounts, give the second one its
+own key, keyed by GitHub owner.
+
+Easiest path: mint a key for the second account with `aznex-worker setup
+--new-key` (signed into that GitHub account in your browser), put your original
+key back as the default, then open <http://localhost:29639/> → **Advanced —
+more than one GitHub account** and add the owner + key there.
+
+The equivalent by hand, in `~/.aznex/config.json`:
+
+```json
+{
+  "serviceUrl": "https://aznex.example.com",
+  "apiKey": "axk_personal",
+  "apiKeys": { "acme-inc": "axk_work" }
+}
+```
+
+Anything under `github.com/acme-inc/…` — reads and writes both — goes out as
+the work identity; everything else uses `apiKey`. Owner match is
+case-insensitive. Nothing to switch: the identity follows the repo, not a
+global toggle, so both accounts work in the same session.
+
+The file is re-read on every session, so no daemon restart is needed. The
+second account must already be a member of the Aznex org that owns those repos
+— a key picks the identity, it doesn't grant access.
+
+Reads follow the same routing **only if** the MCP server goes through the
+proxy. The plugin already does; `aznex-worker setup` bakes a single key into
+`~/.claude.json` instead, so re-register it once:
+
+```sh
+claude mcp remove aznex -s user
+claude mcp add aznex -s user -- aznex-worker mcp
+```
+
 ## Claude Code hook setup
 
 `aznex-worker setup` wires this automatically into your global

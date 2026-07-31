@@ -1,4 +1,5 @@
-import { loadWorkerConfig } from "./config.js";
+import { computeRepoFingerprint } from "@aznex/shared";
+import { loadWorkerConfig, resolveApiKey } from "./config.js";
 
 // `aznex-worker mcp` — stdio→HTTP MCP proxy so the Claude Code plugin can
 // declare an MCP server without shipping the Bearer key: the key stays in
@@ -10,11 +11,28 @@ import { loadWorkerConfig } from "./config.js";
 export interface ProxyDeps {
   fetchImpl?: typeof fetch;
   configPath?: string;
+  cwd?: string;
+}
+
+// One `git remote get-url` per proxy process, not per JSON-RPC line: the proxy
+// is spawned by the agent inside the repo it is reading for, so the answer
+// can't change under us.
+const fingerprints = new Map<string, Promise<string | null>>();
+function fingerprintFor(cwd: string): Promise<string | null> {
+  let pending = fingerprints.get(cwd);
+  if (!pending) {
+    pending = computeRepoFingerprint(cwd).catch(() => null);
+    fingerprints.set(cwd, pending);
+  }
+  return pending;
 }
 
 export async function proxyLine(line: string, deps: ProxyDeps = {}): Promise<string | null> {
   const config = loadWorkerConfig(deps.configPath);
-  if (!config.serviceUrl || !config.apiKey) {
+  // Reads go out as the identity that owns this repo, so a work repo and a
+  // personal repo on the same machine each see their own memories.
+  const apiKey = resolveApiKey(config, await fingerprintFor(deps.cwd ?? process.cwd()));
+  if (!config.serviceUrl || !apiKey) {
     const id = (JSON.parse(line) as { id?: unknown }).id ?? null;
     return JSON.stringify({
       jsonrpc: "2.0",
@@ -25,7 +43,7 @@ export async function proxyLine(line: string, deps: ProxyDeps = {}): Promise<str
   const res = await (deps.fetchImpl ?? fetch)(`${config.serviceUrl}/mcp`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${config.apiKey}`,
+      Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
       Accept: "application/json, text/event-stream",
     },
