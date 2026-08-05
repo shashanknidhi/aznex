@@ -42,8 +42,13 @@ if (localStorage.getItem("aznex-theme") === "light")
   <nav class="nav-links">
     <a href="https://github.com/shashanknidhi/aznex/tree/main/docs">Docs</a>
     <a href="https://github.com/shashanknidhi/aznex">GitHub</a>
-    <a class="nav-cta" href="https://app.aznex.ai">Sign in</a>
-    <button class="theme" type="button" id="theme">Light</button>
+    <button class="theme" type="button" id="theme">
+      <!-- Half-filled square: the contrast glyph, squared to match the mark. -->
+      <svg class="theme-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+        <path d="M1 1h7v14H1z" fill="currentColor"/>
+        <path d="M1.5 1.5h13v13h-13z" fill="none" stroke="currentColor"/>
+      </svg>
+    </button>
   </nav>
 </header>
 
@@ -270,8 +275,9 @@ if (localStorage.getItem("aznex-theme") === "light")
 const themeBtn = document.getElementById("theme");
 const paintTheme = () => {
   const light = document.documentElement.dataset.theme === "light";
-  themeBtn.textContent = light ? "Dark" : "Light";
-  themeBtn.setAttribute("aria-label", `Switch to ${light ? "dark" : "light"} theme`);
+  const label = `Switch to ${light ? "dark" : "light"} theme`;
+  themeBtn.setAttribute("aria-label", label);
+  themeBtn.title = label;
 };
 themeBtn.addEventListener("click", () => {
   const light = document.documentElement.dataset.theme === "light";

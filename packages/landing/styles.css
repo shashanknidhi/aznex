@@ -116,17 +116,17 @@ code { font-family: var(--mono); font-size: 0.9em; }
 .nav-cta { color: var(--ochre); }
 
 .theme {
+  display: flex;
+  align-items: center;
   padding: 0;
   background: none;
   border: none;
   color: var(--mute);
-  font-family: var(--mono);
-  font-size: 0.6875rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
   cursor: pointer;
 }
 .theme:hover { color: var(--bone); }
+.theme-icon { width: 0.9375rem; height: 0.9375rem; display: block; }
+:root[data-theme="light"] .theme-icon { transform: rotate(180deg); }
 /* No JS, no choice to offer — the page is dark and the button would lie. */
 html:not(.js) .theme { display: none; }
 
