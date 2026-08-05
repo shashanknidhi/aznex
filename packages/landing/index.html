@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aznex — team memory for coding agents</title>
+<meta name="description" content="Your coding agent forgets between sessions and its knowledge is stuck on one machine. Aznex captures it from agent hooks, extracts it locally, and serves it back to any agent over MCP — scoped to the repo, shared with the team.">
+<link rel="canonical" href="https://aznex.ai/">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://aznex.ai/">
+<meta property="og:title" content="Aznex — team memory for coding agents">
+<meta property="og:description" content="Captured from agent hooks. Extracted on your machine. Served to any agent over MCP.">
+<meta property="og:image" content="https://aznex.ai/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Aznex — team memory for coding agents">
+<meta name="twitter:description" content="Captured from agent hooks. Extracted on your machine. Served to any agent over MCP.">
+<meta name="twitter:image" content="https://aznex.ai/og.png">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="preload" href="/assets/bricolage-grotesque-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="nav">
+  <a class="wordmark" href="/">aznex</a>
+  <nav class="nav-links">
+    <a href="https://github.com/shashanknidhi/aznex/tree/main/docs">Docs</a>
+    <a href="https://github.com/shashanknidhi/aznex">GitHub</a>
+    <a class="nav-cta" href="https://app.aznex.ai">Sign in</a>
+  </nav>
+</header>
+
+<main id="main">
+
+  <section class="section hero">
+    <h1 class="hero-title">Your agent forgets.<br><span class="hero-title-em">Your team shouldn't.</span></h1>
+    <p class="hero-sub">Aznex keeps what your coding agents learn — build quirks, decisions, dead ends —
+      scoped to the repository and readable by any agent over MCP.</p>
+
+    <div class="install">
+      <pre class="install-cmd"><code id="cmd">curl -fsSL https://aznex.ai/install.sh | bash</code></pre>
+      <button class="install-copy" type="button" data-copy="#cmd">Copy</button>
+    </div>
+    <p class="install-note">Installs the worker, wires capture hooks for Claude Code and Codex, and registers
+      the <code>aznex</code> MCP server. Nothing to paste, no API key.</p>
+  </section>
+
+  <!-- Signature: the write path, animated. Raw tool calls stay local (mute),
+       one structured memory crosses the wire (ochre). -->
+  <section class="section tape-wrap" aria-labelledby="tape-h">
+    <h2 class="eyebrow" id="tape-h">What happens while you work</h2>
+
+    <div class="tape" data-animate>
+      <div class="tape-col tape-raw">
+        <p class="tape-label">your session, on your machine</p>
+        <ul class="raw-list">
+          <li class="raw" style="--i:0"><span class="raw-tool">Read</span>(src/auth/authorize.ts)</li>
+          <li class="raw" style="--i:1"><span class="raw-tool">Bash</span>(bun test packages/service)</li>
+          <li class="raw" style="--i:2"><span class="raw-tool">Edit</span>(src/routes/ingest.ts)</li>
+          <li class="raw" style="--i:3"><span class="raw-tool">Read</span>(docs/data-lifecycle.md)</li>
+        </ul>
+      </div>
+
+      <div class="wire wire-1" aria-hidden="true"></div>
+
+      <div class="tape-col tape-node">
+        <div class="node">
+          <span class="node-title">extract</span>
+          <span class="node-sub">your Claude&nbsp;Code CLI</span>
+        </div>
+        <p class="node-foot">raw output stops here</p>
+      </div>
+
+      <div class="wire wire-2" aria-hidden="true"></div>
+
+      <div class="tape-col tape-out">
+        <article class="memcard">
+          <p class="memcard-type">extracted_learning</p>
+          <h3 class="memcard-title">Collaborator check must not gate on permission level</h3>
+          <p class="memcard-body">GitHub reports <code>read</code> for every login on a public repo,
+            so authorize on 204 from the collaborators endpoint instead.</p>
+          <p class="memcard-anchor">src/auth/authorize.ts</p>
+        </article>
+        <p class="tape-label tape-label-end">shared with the team</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="privacy-h">
+    <div class="claim">
+      <h2 class="claim-title" id="privacy-h">Extraction runs on your machine, on the subscription you already pay for.</h2>
+      <p class="claim-body">The background worker spawns the coding-agent CLI you are already signed in to —
+        Claude Code or Codex — to turn a session into structured memory. There is no separate API key and no
+        per-seat LLM bill. File contents, command output and diffs never leave the machine; only the finished
+        memory is transmitted.</p>
+    </div>
+
+    <div class="grid">
+      <div class="cell">
+        <h3 class="cell-title">Capture is automatic</h3>
+        <p class="cell-body">Agent hooks fire, return immediately, and enqueue. The session you are in does
+          nothing else and never stalls.</p>
+      </div>
+      <div class="cell">
+        <h3 class="cell-title">Secrets scrubbed twice</h3>
+        <p class="cell-body">Once in the worker before transmission, again in the service at ingestion. Both
+          passes are mandatory.</p>
+      </div>
+      <div class="cell">
+        <h3 class="cell-title">Any agent can read</h3>
+        <p class="cell-body">One MCP endpoint. Capture needs a thin per-agent hook; reads need nothing but an
+          MCP-capable client.</p>
+      </div>
+      <div class="cell">
+        <h3 class="cell-title">Access follows the git host</h3>
+        <p class="cell-body">Membership in the repo's org <em>and</em> a live collaborator check, on every
+          request. Remove someone and their access is gone.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="flow-h">
+    <h2 class="eyebrow" id="flow-h">Both directions</h2>
+    <dl class="flow">
+      <div class="flow-row">
+        <dt class="flow-dt">write</dt>
+        <dd class="flow-dd">agent <span class="flow-op">—hooks→</span> worker <span class="flow-dim">[compress · extract · scrub]</span>
+          <span class="flow-op">—POST→</span> service <span class="flow-dim">[auth · re-scan · persist]</span></dd>
+      </div>
+      <div class="flow-row">
+        <dt class="flow-dt">read</dt>
+        <dd class="flow-dd">agent <span class="flow-op">—MCP query→</span> service <span class="flow-dim">[auth · verify]</span>
+          <span class="flow-op">→</span> the team's memory for this repo</dd>
+      </div>
+    </dl>
+  </section>
+
+  <section class="section" aria-labelledby="self-h">
+    <h2 class="eyebrow" id="self-h">Self-host</h2>
+    <p class="prose">Aznex is one deployable — ingestion API, MCP endpoint and viewer in a single container.
+      Run it on your own infrastructure and the memory never touches ours.</p>
+    <pre class="cmd-block"><code>docker compose -f docker/docker-compose.yml up</code></pre>
+    <p class="prose"><a href="https://github.com/shashanknidhi/aznex/blob/main/docs/setup.md">Setup guide →</a></p>
+  </section>
+
+  <section class="section" aria-labelledby="faq-h">
+    <h2 class="eyebrow" id="faq-h">Questions</h2>
+    <div class="faq">
+      <details>
+        <summary>Does my code leave my machine?</summary>
+        <p>No. Hooks and extraction run locally. What is transmitted is the extracted memory — a title,
+          a narrative, facts, concepts and the paths of the files involved. File contents, command output
+          and diffs stay on the machine.</p>
+      </details>
+      <details>
+        <summary>Do I need an API key for the LLM?</summary>
+        <p>No. Extraction spawns whichever coding-agent CLI you already have installed and logged in —
+          Claude Code or Codex — so it runs on your own subscription.</p>
+      </details>
+      <details>
+        <summary>Which agents does it work with?</summary>
+        <p>Capture works with Claude Code and Codex today, through thin hook adapters. Reads work with any
+          MCP-compatible agent, because the read side is a standard MCP server.</p>
+      </details>
+      <details>
+        <summary>Who can see my team's memory?</summary>
+        <p>Anyone who is a member of the repository's organization in Aznex <em>and</em> whom the git host
+          still lists as a collaborator on that repository. Both gates are checked on every request; either
+          one failing denies access.</p>
+      </details>
+      <details>
+        <summary>How do I remove a memory that is wrong?</summary>
+        <p>Delete it. The author, an org admin or a super admin can remove any memory from the viewer.
+          Deletion is the only withdrawal — there is no archived or deprecated state to reason about.</p>
+      </details>
+      <details>
+        <summary>Is it open source?</summary>
+        <p>Yes. The service, worker, viewer and shared types are all in
+          <a href="https://github.com/shashanknidhi/aznex">one repository</a>.</p>
+      </details>
+    </div>
+  </section>
+
+  <section class="section closer">
+    <p class="closer-line">Start with one repo.</p>
+    <div class="install">
+      <pre class="install-cmd"><code id="cmd2">curl -fsSL https://aznex.ai/install.sh | bash</code></pre>
+      <button class="install-copy" type="button" data-copy="#cmd2">Copy</button>
+    </div>
+  </section>
+
+</main>
+
+<footer class="foot">
+  <span class="foot-mark">aznex</span>
+  <nav class="foot-links">
+    <a href="https://github.com/shashanknidhi/aznex">GitHub</a>
+    <a href="https://github.com/shashanknidhi/aznex/tree/main/docs">Docs</a>
+    <a href="https://github.com/shashanknidhi/aznex/blob/main/SECURITY.md">Security</a>
+    <a href="https://github.com/shashanknidhi/aznex/blob/main/LICENSE">License</a>
+    <a href="https://app.aznex.ai">Sign in</a>
+  </nav>
+</footer>
+
+<script>
+// Copy button. Everything else on this page works without JS.
+for (const btn of document.querySelectorAll(".install-copy")) {
+  btn.addEventListener("click", async () => {
+    const text = document.querySelector(btn.dataset.copy).textContent;
+    try {
+      await navigator.clipboard.writeText(text);
+      btn.textContent = "Copied";
+    } catch {
+      btn.textContent = "Press ⌘C";
+    }
+    setTimeout(() => { btn.textContent = "Copy"; }, 2000);
+  });
+}
+
+// The tape animates only when it is on screen and motion is welcome. Without
+// this class the CSS already shows the finished frame, so no-JS and
+// reduced-motion users see the same diagram, just not assembling itself.
+const tape = document.querySelector("[data-animate]");
+if (tape && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
+  new IntersectionObserver((entries, obs) => {
+    for (const e of entries) if (e.isIntersecting) { e.target.classList.add("play"); obs.unobserve(e.target); }
+  }, { threshold: 0.35 }).observe(tape);
+}
+</script>
+
+</body>
+</html>

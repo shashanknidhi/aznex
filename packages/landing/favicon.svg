@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <rect width="32" height="32" fill="#0b0e14"/>
+  <!-- three raw lines converging into one remembered one -->
+  <g stroke="#7e8ba3" stroke-width="2.5" stroke-linecap="square">
+    <path d="M6 9h9"/>
+    <path d="M6 16h6"/>
+    <path d="M6 23h9"/>
+  </g>
+  <rect x="19" y="12" width="8" height="8" fill="#e0a458"/>
+</svg>

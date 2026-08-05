@@ -27,7 +27,7 @@ export interface AppEnv {
 
 export function createApp(
   db: Database,
-  opts?: { auth?: Auth; staticDir?: string },
+  opts?: { auth?: Auth; staticDir?: string; landingDir?: string; landingHosts?: string[] },
 ): Hono<AppEnv> {
   const app = new Hono<AppEnv>();
   const auth = opts?.auth ?? null;
@@ -90,16 +90,39 @@ export function createApp(
   // the whole app is one same-origin deployable. API groups above win; any
   // other GET falls back to index.html for client-side routing.
   const staticDir = opts?.staticDir;
-  if (staticDir) {
-    app.get("*", async (c) => {
-      const path = new URL(c.req.url).pathname;
-      if (!path.includes("..")) {
-        const file = Bun.file(`${staticDir}${path}`);
-        if (path !== "/" && (await file.exists())) return new Response(file);
-      }
-      return new Response(Bun.file(`${staticDir}/index.html`), {
+  const landingDir = opts?.landingDir;
+  const landingHosts = opts?.landingHosts ?? [];
+  if (staticDir || landingDir) {
+    // A file from `dir`, or null if the path escapes the directory or misses.
+    const fileIn = async (dir: string, path: string) => {
+      if (path === "/" || path.includes("..")) return null;
+      const file = Bun.file(`${dir}${path}`);
+      return (await file.exists()) ? new Response(file) : null;
+    };
+    const html = (path: string) =>
+      new Response(Bun.file(path), {
         headers: { "Content-Type": "text/html; charset=utf-8" },
       });
+
+    app.get("*", async (c) => {
+      const path = new URL(c.req.url).pathname;
+
+      // Apex domain (aznex.ai): marketing page. Unknown paths redirect to the
+      // app rather than falling back to the landing page, so a shared deep link
+      // like aznex.ai/repo/x opens the repo instead of silently showing
+      // marketing copy. API groups and /install.sh are registered above and
+      // still win here — the install one-liner works on both hosts.
+      const host = (c.req.header("host") ?? "").toLowerCase().replace(/:\d+$/, "");
+      if (landingDir && landingHosts.includes(host)) {
+        if (path === "/") return html(`${landingDir}/index.html`);
+        const asset = await fileIn(landingDir, path);
+        if (asset) return asset;
+        const base = (process.env["AZNEX_BASE_URL"] ?? "").replace(/\/+$/, "");
+        return c.redirect(`${base}${path}${new URL(c.req.url).search}`, 302);
+      }
+
+      if (!staticDir) return c.notFound();
+      return (await fileIn(staticDir, path)) ?? html(`${staticDir}/index.html`);
     });
   }
 

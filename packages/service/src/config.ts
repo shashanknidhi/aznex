@@ -4,10 +4,22 @@ export interface Config {
   githubAppId: string | null;
   githubAppPrivateKey: string | null;
   repoAccessTtlMs: number;
+  landingHosts: string[];
+}
+
+// Hosts that get the marketing landing page instead of the app SPA, from
+// AZNEX_LANDING_HOST (comma-separated). Empty by default, which means no host
+// is special and every request behaves exactly as it did before this existed.
+export function parseLandingHosts(raw: string | undefined): string[] {
+  return (raw ?? "")
+    .split(",")
+    .map((h) => h.trim().toLowerCase().replace(/:\d+$/, ""))
+    .filter(Boolean);
 }
 
 export function loadConfig(): Config {
   return {
+    landingHosts: parseLandingHosts(process.env["AZNEX_LANDING_HOST"]),
     port: Number(process.env["PORT"] ?? 3000),
     githubAppId: process.env["GITHUB_APP_ID"] ?? null,
     // PEM private key; newlines may be escaped in env, so un-escape them.
