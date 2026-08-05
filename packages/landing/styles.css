@@ -30,16 +30,16 @@
   color-scheme: dark;
 }
 
-@media (prefers-color-scheme: light) {
-  :root {
-    --ink: #f4f6f9;
-    --slate: #ffffff;
-    --rule: #d7dee8;
-    --bone: #131a24;
-    --mute: #5c6a80;
-    --ochre: #a96a15;
-    color-scheme: light;
-  }
+/* Dark is the default for everyone, system preference included — the palette is
+   the brand, not an accommodation. Light is an explicit, remembered choice. */
+:root[data-theme="light"] {
+  --ink: #f4f6f9;
+  --slate: #ffffff;
+  --rule: #d7dee8;
+  --bone: #131a24;
+  --mute: #5c6a80;
+  --ochre: #a96a15;
+  color-scheme: light;
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -93,16 +93,17 @@ code { font-family: var(--mono); font-size: 0.9em; }
 .wordmark {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  font-size: 1.25rem;
+  gap: 0.6rem;
+  font-size: 1.5rem;
   font-weight: 700;
   letter-spacing: -0.045em;
   text-decoration: none;
 }
 
 /* Three raw traces resolving into one remembered unit — the same thing the
-   hero diagram acts out. */
-.mark { width: 1.125em; height: 1.125em; flex: none; }
+   hero diagram acts out. The viewBox is cropped to the glyph so the mark
+   reads at the wordmark's own size instead of shrinking inside its padding. */
+.mark { height: 0.92em; width: 1.2em; flex: none; }
 
 .nav-links {
   display: flex;
@@ -113,6 +114,21 @@ code { font-family: var(--mono); font-size: 0.9em; }
 .nav-links a { text-decoration: none; }
 .nav-links a:hover { color: var(--bone); }
 .nav-cta { color: var(--ochre); }
+
+.theme {
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--mute);
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.theme:hover { color: var(--bone); }
+/* No JS, no choice to offer — the page is dark and the button would lie. */
+html:not(.js) .theme { display: none; }
 
 /* ---------- shared section rhythm ---------- */
 

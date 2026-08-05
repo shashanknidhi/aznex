@@ -17,9 +17,13 @@ reference rendering — if the two disagree, one of them is a bug.
 
 - **No external requests.** Fonts are self-hosted, SVGs are inline, there is no
   analytics script. The page must render with nothing but this directory.
-- **No JS beyond the copy button and one IntersectionObserver.** Everything
-  else works with JS disabled, and the hero diagram shows its finished frame
-  under `prefers-reduced-motion`.
+- **No JS beyond the copy button, the theme toggle and one IntersectionObserver.**
+  Everything else works with JS disabled — the page stays dark, the toggle hides
+  itself, and the hero diagram shows its finished frame. Same under
+  `prefers-reduced-motion`.
+- **Dark is the default for every visitor.** Light is an explicit choice stored
+  in `localStorage` and applied as `data-theme="light"` by an inline head script,
+  before first paint.
 - **Every claim must be true today.** Trace it to the README, `CLAUDE.md` or
   working code. Roadmap items (Postgres + pgvector, Neo4j) do not appear here.
 - Page weight budget: 100 KB for everything the page loads. Currently ~90 KB,

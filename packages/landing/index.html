@@ -18,6 +18,12 @@
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="preload" href="/assets/bricolage-grotesque-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/styles.css">
+<script>
+// Applied before first paint so a light-theme visitor never sees a dark flash.
+document.documentElement.classList.add("js");
+if (localStorage.getItem("aznex-theme") === "light")
+  document.documentElement.dataset.theme = "light";
+</script>
 </head>
 <body>
 
@@ -25,11 +31,11 @@
 
 <header class="nav">
   <a class="wordmark" href="/">
-    <svg class="mark" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
-      <g stroke="currentColor" stroke-width="2.5" stroke-linecap="square" opacity="0.55">
+    <svg class="mark" viewBox="4.5 7 23.5 18" aria-hidden="true" focusable="false">
+      <g stroke="currentColor" stroke-width="2.6" stroke-linecap="square" opacity="0.6">
         <path d="M6 9h9"/><path d="M6 16h6"/><path d="M6 23h9"/>
       </g>
-      <rect x="19" y="12" width="8" height="8" fill="#e0a458"/>
+      <rect x="19" y="12" width="8" height="8" fill="var(--ochre)"/>
     </svg>
     aznex
   </a>
@@ -37,6 +43,7 @@
     <a href="https://github.com/shashanknidhi/aznex/tree/main/docs">Docs</a>
     <a href="https://github.com/shashanknidhi/aznex">GitHub</a>
     <a class="nav-cta" href="https://app.aznex.ai">Sign in</a>
+    <button class="theme" type="button" id="theme">Light</button>
   </nav>
 </header>
 
@@ -241,11 +248,11 @@
 
 <footer class="foot">
   <span class="foot-mark">
-    <svg class="mark" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
-      <g stroke="currentColor" stroke-width="2.5" stroke-linecap="square" opacity="0.55">
+    <svg class="mark" viewBox="4.5 7 23.5 18" aria-hidden="true" focusable="false">
+      <g stroke="currentColor" stroke-width="2.6" stroke-linecap="square" opacity="0.6">
         <path d="M6 9h9"/><path d="M6 16h6"/><path d="M6 23h9"/>
       </g>
-      <rect x="19" y="12" width="8" height="8" fill="#e0a458"/>
+      <rect x="19" y="12" width="8" height="8" fill="var(--ochre)"/>
     </svg>
     aznex
   </span>
@@ -259,6 +266,22 @@
 </footer>
 
 <script>
+// Theme toggle. The label names the theme you get by pressing it.
+const themeBtn = document.getElementById("theme");
+const paintTheme = () => {
+  const light = document.documentElement.dataset.theme === "light";
+  themeBtn.textContent = light ? "Dark" : "Light";
+  themeBtn.setAttribute("aria-label", `Switch to ${light ? "dark" : "light"} theme`);
+};
+themeBtn.addEventListener("click", () => {
+  const light = document.documentElement.dataset.theme === "light";
+  if (light) delete document.documentElement.dataset.theme;
+  else document.documentElement.dataset.theme = "light";
+  localStorage.setItem("aznex-theme", light ? "dark" : "light");
+  paintTheme();
+});
+paintTheme();
+
 // Copy button. Everything else on this page works without JS.
 for (const btn of document.querySelectorAll(".install-copy")) {
   btn.addEventListener("click", async () => {

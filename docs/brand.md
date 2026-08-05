@@ -105,7 +105,13 @@ Wordmark: `aznex`, lowercase, Bricolage Grotesque 700, tracking −4.5%.
 | ochre | `#E0A458` | the one accent — **shared context, crossed the wire** |
 
 **Ochre is never decorative.** It carries a meaning, so it cannot be spent on
-emphasis. Light mode: paper `#F4F6F9`, ochre darkens to `#A96A15` for contrast.
+emphasis.
+
+**Dark is the default for everyone**, system preference included — the palette
+is the brand, not an accommodation. Light is an explicit, remembered choice
+behind a toggle: paper `#F4F6F9`, ochre darkened to `#A96A15` to hold contrast
+against it. Surfaces implement this as `:root[data-theme="light"]`, never as a
+bare `prefers-color-scheme` block, or the default stops being a decision.
 
 ### Type
 
