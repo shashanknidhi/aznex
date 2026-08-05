@@ -3,17 +3,17 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Aznex — team memory for coding agents</title>
-<meta name="description" content="Your coding agent forgets between sessions and its knowledge is stuck on one machine. Aznex captures it from agent hooks, extracts it locally, and serves it back to any agent over MCP — scoped to the repo, shared with the team.">
+<title>Aznex — the shared context layer for engineering teams</title>
+<meta name="description" content="One developer's agent works something out; every teammate's agent starts from there. Aznex captures context from agent hooks, extracts it on your own machine, and serves it back to any agent over MCP — scoped to the repo, shared with the team.">
 <link rel="canonical" href="https://aznex.ai/">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://aznex.ai/">
-<meta property="og:title" content="Aznex — team memory for coding agents">
-<meta property="og:description" content="Captured from agent hooks. Extracted on your machine. Served to any agent over MCP.">
+<meta property="og:title" content="Aznex — the shared context layer for engineering teams">
+<meta property="og:description" content="One developer's agent works something out; every teammate's agent starts from there.">
 <meta property="og:image" content="https://aznex.ai/og.png">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="Aznex — team memory for coding agents">
-<meta name="twitter:description" content="Captured from agent hooks. Extracted on your machine. Served to any agent over MCP.">
+<meta name="twitter:title" content="Aznex — the shared context layer for engineering teams">
+<meta name="twitter:description" content="One developer's agent works something out; every teammate's agent starts from there.">
 <meta name="twitter:image" content="https://aznex.ai/og.png">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="preload" href="/assets/bricolage-grotesque-latin.woff2" as="font" type="font/woff2" crossorigin>
@@ -24,7 +24,15 @@
 <a class="skip" href="#main">Skip to content</a>
 
 <header class="nav">
-  <a class="wordmark" href="/">aznex</a>
+  <a class="wordmark" href="/">
+    <svg class="mark" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
+      <g stroke="currentColor" stroke-width="2.5" stroke-linecap="square" opacity="0.55">
+        <path d="M6 9h9"/><path d="M6 16h6"/><path d="M6 23h9"/>
+      </g>
+      <rect x="19" y="12" width="8" height="8" fill="#e0a458"/>
+    </svg>
+    aznex
+  </a>
   <nav class="nav-links">
     <a href="https://github.com/shashanknidhi/aznex/tree/main/docs">Docs</a>
     <a href="https://github.com/shashanknidhi/aznex">GitHub</a>
@@ -36,8 +44,8 @@
 
   <section class="section hero">
     <h1 class="hero-title">Your agent forgets.<br><span class="hero-title-em">Your team shouldn't.</span></h1>
-    <p class="hero-sub">Aznex keeps what your coding agents learn — build quirks, decisions, dead ends —
-      scoped to the repository and readable by any agent over MCP.</p>
+    <p class="hero-sub">Aznex is the shared context layer for your repo. One developer's agent works
+      something out; every teammate's agent starts from there.</p>
 
     <div class="install">
       <pre class="install-cmd"><code id="cmd">curl -fsSL https://aznex.ai/install.sh | bash</code></pre>
@@ -88,6 +96,35 @@
     </div>
   </section>
 
+  <!-- The tape shows one session. This shows why it is worth sharing: the same
+       store, written by everyone, read by everyone. -->
+  <section class="section" aria-labelledby="team-h">
+    <h2 class="eyebrow" id="team-h">This week, on three machines</h2>
+
+    <div class="team">
+      <div class="team-in">
+        <ul class="who-list">
+          <li class="who"><span class="who-name">maya</span> traced the ingest 413s to a hook payload cap</li>
+          <li class="who"><span class="who-name">sam</span> found the migration the backfill depends on</li>
+          <li class="who"><span class="who-name">you</span> gave up on the pgvector spike, twice</li>
+        </ul>
+      </div>
+
+      <div class="wire wire-team" aria-hidden="true"></div>
+
+      <div class="team-store">
+        <p class="store-title">this repo's context</p>
+        <p class="store-sub">one store, org-gated, no promotion step</p>
+      </div>
+
+      <div class="wire wire-team" aria-hidden="true"></div>
+
+      <div class="team-out">
+        <p class="out-line">Whoever opens an agent next<br>starts from all three.</p>
+      </div>
+    </div>
+  </section>
+
   <section class="section" aria-labelledby="privacy-h">
     <div class="claim">
       <h2 class="claim-title" id="privacy-h">Extraction runs on your machine, on the subscription you already pay for.</h2>
@@ -121,27 +158,36 @@
     </div>
   </section>
 
-  <section class="section" aria-labelledby="flow-h">
-    <h2 class="eyebrow" id="flow-h">Both directions</h2>
-    <dl class="flow">
-      <div class="flow-row">
-        <dt class="flow-dt">write</dt>
-        <dd class="flow-dd">agent <span class="flow-op">—hooks→</span> worker <span class="flow-dim">[compress · extract · scrub]</span>
-          <span class="flow-op">—POST→</span> service <span class="flow-dim">[auth · re-scan · persist]</span></dd>
-      </div>
-      <div class="flow-row">
-        <dt class="flow-dt">read</dt>
-        <dd class="flow-dd">agent <span class="flow-op">—MCP query→</span> service <span class="flow-dim">[auth · verify]</span>
-          <span class="flow-op">→</span> the team's memory for this repo</dd>
-      </div>
-    </dl>
+  <!-- The read side, as it actually looks: an MCP tool call and what comes back. -->
+  <section class="section" aria-labelledby="recall-h">
+    <h2 class="eyebrow" id="recall-h">When an agent asks</h2>
+
+    <div class="recall">
+      <p class="recall-call"><span class="recall-arrow">→</span> aznex.get_memories_by_path(<span
+        class="recall-arg">"src/auth/authorize.ts"</span>)</p>
+      <ul class="recall-list">
+        <li class="recall-row">
+          <span class="recall-type">decision</span>
+          <span>Authorize on collaborator membership, never permission level</span>
+        </li>
+        <li class="recall-row">
+          <span class="recall-type">negative_result</span>
+          <span>Org membership alone let a removed collaborator keep reading</span>
+        </li>
+        <li class="recall-row">
+          <span class="recall-type">extracted_learning</span>
+          <span>The 204 from the collaborators endpoint is the whole check</span>
+        </li>
+      </ul>
+    </div>
+    <p class="prose recall-note">No prompt to write, no file to paste. The agent asks about the file it is
+      already editing and gets what the team knows about it.</p>
   </section>
 
   <section class="section" aria-labelledby="self-h">
     <h2 class="eyebrow" id="self-h">Self-host</h2>
     <p class="prose">Aznex is one deployable — ingestion API, MCP endpoint and viewer in a single container.
-      Run it on your own infrastructure and the memory never touches ours.</p>
-    <pre class="cmd-block"><code>docker compose -f docker/docker-compose.yml up</code></pre>
+      Run it on your own infrastructure and the context never touches ours.</p>
     <p class="prose"><a href="https://github.com/shashanknidhi/aznex/blob/main/docs/setup.md">Setup guide →</a></p>
   </section>
 
@@ -194,7 +240,15 @@
 </main>
 
 <footer class="foot">
-  <span class="foot-mark">aznex</span>
+  <span class="foot-mark">
+    <svg class="mark" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
+      <g stroke="currentColor" stroke-width="2.5" stroke-linecap="square" opacity="0.55">
+        <path d="M6 9h9"/><path d="M6 16h6"/><path d="M6 23h9"/>
+      </g>
+      <rect x="19" y="12" width="8" height="8" fill="#e0a458"/>
+    </svg>
+    aznex
+  </span>
   <nav class="foot-links">
     <a href="https://github.com/shashanknidhi/aznex">GitHub</a>
     <a href="https://github.com/shashanknidhi/aznex/tree/main/docs">Docs</a>
