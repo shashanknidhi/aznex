@@ -26,6 +26,10 @@ reference rendering — if the two disagree, one of them is a bug.
   before first paint.
 - **Every claim must be true today.** Trace it to the README, `CLAUDE.md` or
   working code. Roadmap items (Postgres + pgvector, Neo4j) do not appear here.
+- **No call to action a visitor cannot complete.** The hosted instance is
+  invite-only (`middleware/auth.ts:32` refuses any login without an org
+  membership), so the primary CTA asks for pilot access. The install one-liner
+  lives in the Getting started step, after you have a service URL.
 - Page weight: ~108 KB uncompressed, of which 69 KB is the two woff2 fonts
   (already compressed) and 38 KB is HTML + CSS that gzips to 11 KB.
   So ~79 KB over the wire, against a 100 KB budget. If the HTML and CSS grow

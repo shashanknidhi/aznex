@@ -71,6 +71,13 @@ happens and trust the reader to draw the conclusion.
 Not: "supercharge", "unlock", "seamless", "effortless", "AI-powered",
 "knowledge base", "second brain".
 
+**Never offer an action the reader cannot complete.** The hosted instance is
+invite-only — organisations are created deliberately, and a signed-in stranger
+is refused at the first authenticated call. So the install one-liner is not a
+call to action for a visitor; it belongs after "you have a service URL". The
+honest ask is pilot access, and saying why it is invite-only is better copy than
+hiding it.
+
 **Lexicon.** The layer is **context**; the unit is a **memory**. Keeping those
 distinct is what stops the brand sliding back into the memory lane — we sell the
 layer, we store memories. Say *repo, agent, session, collaborator, the team's

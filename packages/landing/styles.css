@@ -221,12 +221,33 @@ html:not(.js) .theme { display: none; }
   color: var(--mute);
 }
 
-.install {
+.cta-row {
   display: flex;
   flex-wrap: wrap;
   align-items: stretch;
   gap: 0.5rem;
 }
+/* Inside a step the column is narrow, so the command and its button have to
+   stay on one line and let the command scroll rather than wrapping under it. */
+.cta-row-tight { margin-top: 0.875rem; flex-wrap: nowrap; }
+.cta-row-tight .install-cmd { padding: 0.6rem 0.75rem; font-size: 0.8125rem; }
+.cta-row-tight .install-copy { padding: 0.6rem 0.9rem; }
+
+.btn {
+  padding: 0.875rem 1.25rem;
+  border: 1px solid var(--ochre);
+  font-family: var(--mono);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-decoration: none;
+  cursor: pointer;
+}
+.btn-solid { background: var(--ochre); color: var(--ink); }
+.btn-solid:hover { background: transparent; color: var(--ochre); }
+.btn-ghost { border-color: var(--rule); color: var(--bone); }
+.btn-ghost:hover { border-color: var(--ochre); color: var(--ochre); }
 
 .install-cmd {
   /* flex items default to min-width:auto, which lets the un-wrappable command
@@ -592,6 +613,7 @@ html:not(.js) .theme { display: none; }
   border-top: 1px solid var(--rule);
 }
 .step:last-child { border-bottom: 1px solid var(--rule); }
+.step > div { min-width: 0; } /* so the command inside can shrink and scroll */
 .step-n {
   flex: 0 0 1.75rem;
   font-family: var(--mono);
@@ -670,8 +692,13 @@ html:not(.js) .theme { display: none; }
 /* ---------- closer + footer ---------- */
 
 .closer { padding-bottom: 5rem; }
-.closer-line {
+.closer-sub {
+  max-width: 34rem;
   margin: 0 0 1.5rem;
+  color: var(--mute);
+}
+.closer-line {
+  margin: 0 0 0.75rem;
   font-size: clamp(1.75rem, 4vw, 2.5rem);
   font-weight: 500;
   letter-spacing: -0.03em;

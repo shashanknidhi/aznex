@@ -60,12 +60,12 @@ if (localStorage.getItem("aznex-theme") === "light")
       <p class="hero-sub">Aznex is the shared context layer for your repo. One developer's agent works
         something out; every teammate's agent starts from there.</p>
 
-      <div class="install">
-        <pre class="install-cmd"><code id="cmd">curl -fsSL https://aznex.ai/install.sh | bash</code></pre>
-        <button class="install-copy" type="button" data-copy="#cmd">Copy</button>
+      <div class="cta-row">
+        <a class="btn btn-solid" href="mailto:shashank@aznex.ai?subject=Aznex%20pilot%20access&body=GitHub%20login%3A%0ARepo%20(github.com%2Fowner%2Fname)%3A%0APeople%20on%20the%20team%3A%0AAgents%20you%20use%3A%0A">Request pilot access</a>
+        <a class="btn btn-ghost" href="https://github.com/shashanknidhi/aznex">Star it on GitHub</a>
       </div>
-      <p class="install-note">Installs the worker, wires capture hooks for Claude Code and Codex, and registers
-        the <code>aznex</code> MCP server. Nothing to paste, no API key.</p>
+      <p class="install-note">The hosted instance is invite-only while we run the pilot — memory is scoped to
+        a repo's organisation, so we set yours up by hand. Self-hosting is open to everyone, today.</p>
     </div>
 
     <!-- The stream, drifting. Real memory titles, not filler — this is what the
@@ -235,25 +235,31 @@ if (localStorage.getItem("aznex-theme") === "light")
           <li class="step" data-step="1">
             <span class="step-n">01</span>
             <div>
-              <h3 class="step-h">Run the installer</h3>
-              <p class="step-b">Installs the worker, signs you in through GitHub in a browser tab, starts
-                the daemon. No key to copy anywhere.</p>
+              <h3 class="step-h">Get a service URL</h3>
+              <p class="step-b"><a href="mailto:shashank@aznex.ai?subject=Aznex%20pilot%20access">Ask for pilot
+                access</a> to the hosted instance, or <a
+                href="https://github.com/shashanknidhi/aznex/blob/main/docs/setup.md">stand up your own</a>.
+                Either way you end up with a URL and an organisation your repo belongs to.</p>
             </div>
           </li>
           <li class="step" data-step="2">
             <span class="step-n">02</span>
             <div>
-              <h3 class="step-h">Work as usual</h3>
-              <p class="step-b">Hooks fire on every session. Extraction runs on your machine. You are not
-                asked to do anything, ever again.</p>
+              <h3 class="step-h">Run the installer</h3>
+              <p class="step-b">One command against that URL. It installs the worker, signs you in through
+                GitHub in a browser tab, and starts the daemon. No key to copy anywhere.</p>
+              <div class="cta-row cta-row-tight">
+                <pre class="install-cmd"><code id="cmd">curl -fsSL https://aznex.ai/install.sh | bash</code></pre>
+                <button class="install-copy" type="button" data-copy="#cmd">Copy</button>
+              </div>
             </div>
           </li>
           <li class="step" data-step="3">
             <span class="step-n">03</span>
             <div>
-              <h3 class="step-h">Ask anything</h3>
-              <p class="step-b">Your agent queries the team's context over MCP, scoped to the repo it is
-                already sitting in.</p>
+              <h3 class="step-h">Work as usual</h3>
+              <p class="step-b">Hooks fire on every session, extraction runs on your machine, and your agent
+                queries the team's context over MCP. You are not asked to do anything again.</p>
             </div>
           </li>
         </ol>
@@ -263,7 +269,7 @@ if (localStorage.getItem("aznex-theme") === "light")
         <div class="term-bar"><span class="term-path">~/dev/aznex</span></div>
         <!-- No newlines between these spans: they are display:block inside a
              <pre>, so a line break in the source prints an extra blank line. -->
-        <pre class="term-body"><code><span class="term-cmd"><span class="term-prompt">$</span> <span data-type>curl -fsSL https://aznex.ai/install.sh | bash</span><span class="caret"></span></span><span class="term-out" data-out="1">installing @aznex/worker</span><span class="term-out" data-out="1">signed in as <b>you</b> — no api key stored</span><span class="term-out" data-out="2">hooks wired: claude code, codex</span><span class="term-out" data-out="3">mcp server registered: <b>aznex</b></span><span class="term-out term-ok" data-out="3">daemon running — capture on</span></code></pre>
+        <pre class="term-body"><code><span class="term-cmd"><span class="term-prompt">$</span> <span data-type>curl -fsSL https://aznex.ai/install.sh | bash</span><span class="caret"></span></span><span class="term-out" data-out="2">installing @aznex/worker</span><span class="term-out" data-out="2">signed in as <b>you</b> — no api key stored</span><span class="term-out" data-out="2">hooks wired: claude code, codex</span><span class="term-out" data-out="2">mcp server registered: <b>aznex</b></span><span class="term-out term-ok" data-out="3">daemon running — capture on</span></code></pre>
       </div>
     </div>
   </section>
@@ -278,6 +284,15 @@ if (localStorage.getItem("aznex-theme") === "light")
   <section class="section" aria-labelledby="faq-h">
     <h2 class="eyebrow" id="faq-h">Questions</h2>
     <div class="faq">
+      <details>
+        <summary>Can I just install it right now?</summary>
+        <p>Self-hosted, yes — clone it, run the container, and the installer points at your own URL.
+          On the hosted instance, not yet: memory is scoped to a repository's organisation, and an
+          organisation is created deliberately rather than on signup. Signing in with GitHub will work
+          and then every call will be refused until your login is in an org, which is why the pilot is
+          a conversation rather than a button. <a href="mailto:shashank@aznex.ai?subject=Aznex%20pilot%20access">Ask
+          for access</a> and it is usually the same day.</p>
+      </details>
       <details>
         <summary>Does my code leave my machine?</summary>
         <p>No. Hooks and extraction run locally. What is transmitted is the extracted memory — a title,
@@ -315,9 +330,10 @@ if (localStorage.getItem("aznex-theme") === "light")
 
   <section class="section closer">
     <p class="closer-line">Start with one repo.</p>
-    <div class="install">
-      <pre class="install-cmd"><code id="cmd2">curl -fsSL https://aznex.ai/install.sh | bash</code></pre>
-      <button class="install-copy" type="button" data-copy="#cmd2">Copy</button>
+    <p class="closer-sub">Tell us the repo and who is on it. Pilot teams get set up the same day.</p>
+    <div class="cta-row">
+      <a class="btn btn-solid" href="mailto:shashank@aznex.ai?subject=Aznex%20pilot%20access&body=GitHub%20login%3A%0ARepo%20(github.com%2Fowner%2Fname)%3A%0APeople%20on%20the%20team%3A%0AAgents%20you%20use%3A%0A">Request pilot access</a>
+      <a class="btn btn-ghost" href="https://github.com/shashanknidhi/aznex">Star it on GitHub</a>
     </div>
   </section>
 
@@ -406,7 +422,7 @@ if (term && !stillness.matches) {
 
   onScreen(term, async () => {
     const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-    light(1);
+    light(2);
     for (const ch of command) { typed.textContent += ch; await wait(28); }
     await wait(320);
     term.classList.remove("armed"); // caret stops blinking, output begins
