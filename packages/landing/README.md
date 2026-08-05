@@ -9,6 +9,10 @@ copies this directory verbatim and serves it when the request's `Host` matches
 the host branch in the service, so they answer on the apex domain too. Any other
 unknown path on the apex redirects to `AZNEX_BASE_URL`.
 
+Positioning, voice, palette, type and the "never" list live in
+[`docs/brand.md`](../../docs/brand.md). This directory is that document's
+reference rendering — if the two disagree, one of them is a bug.
+
 ## Rules
 
 - **No external requests.** Fonts are self-hosted, SVGs are inline, there is no
