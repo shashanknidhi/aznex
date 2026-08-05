@@ -161,11 +161,52 @@ html:not(.js) .theme { display: none; }
 
 /* ---------- hero ---------- */
 
-.hero { padding-top: 4rem; padding-bottom: 2.5rem; }
+.hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 18rem);
+  align-items: center;
+  gap: 2.5rem;
+  padding-top: 4rem;
+  padding-bottom: 2.5rem;
+}
+
+/* Ambient, and the only continuous motion on the page: the stream the store
+   fills up with. Slow enough to read one line, quiet enough to ignore. */
+.drift {
+  height: 22rem;
+  overflow: hidden;
+  mask-image: linear-gradient(transparent, #000 18%, #000 82%, transparent);
+  -webkit-mask-image: linear-gradient(transparent, #000 18%, #000 82%, transparent);
+}
+.drift-track { animation: drift 46s linear infinite; }
+.drift:hover .drift-track { animation-play-state: paused; }
+.drift-item {
+  margin: 0;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--rule);
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  color: var(--mute);
+}
+.drift-item span {
+  display: block;
+  font-family: var(--mono);
+  font-size: 0.625rem;
+  letter-spacing: 0.08em;
+  color: var(--ochre);
+  margin-bottom: 0.25rem;
+}
+@keyframes drift {
+  to { transform: translateY(-50%); }
+}
+
+/* Grid items default to min-width:auto, and the un-wrappable install command
+   inside would otherwise set the column's floor and overflow narrow screens. */
+.hero-copy, .start-copy, .term { min-width: 0; }
 
 .hero-title {
   margin: 0;
-  font-size: clamp(2.75rem, 8vw, 5.25rem);
+  font-size: clamp(2.75rem, 6.4vw, 4.75rem);
   font-weight: 600;
   line-height: 0.98;
   letter-spacing: -0.045em;
@@ -383,6 +424,7 @@ html:not(.js) .theme { display: none; }
   line-height: 1.15;
   letter-spacing: -0.03em;
 }
+.claim-title-em { color: var(--mute); }
 .claim-body {
   max-width: 44rem;
   margin: 0;
@@ -489,6 +531,116 @@ html:not(.js) .theme { display: none; }
 }
 .recall-note { margin-top: 1.25rem; }
 
+/* ---------- agent chips ---------- */
+
+.chips-label {
+  max-width: 46rem;
+  margin: 2rem 0 1rem;
+  font-size: 0.875rem;
+  color: var(--mute);
+}
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.chip {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--rule);
+  font-size: 0.875rem;
+}
+.chip span {
+  display: block;
+  font-family: var(--mono);
+  font-size: 0.625rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--mute);
+  margin-top: 0.2rem;
+}
+/* Capture is the narrower claim, so the ones that do both are the ones marked. */
+.chip-both { border-color: var(--ochre); }
+.chip-both span { color: var(--ochre); }
+.chip-any { border-style: dashed; }
+
+/* ---------- getting started: steps + terminal ---------- */
+
+.start {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
+  align-items: start;
+  gap: 3rem;
+}
+
+.start-title {
+  margin: 0 0 2rem;
+  font-size: clamp(1.75rem, 3.6vw, 2.5rem);
+  font-weight: 500;
+  line-height: 1.05;
+  letter-spacing: -0.035em;
+}
+.start-title-em { color: var(--mute); }
+
+.steps { margin: 0; padding: 0; list-style: none; }
+.step {
+  display: flex;
+  gap: 1rem;
+  padding: 1rem 0;
+  border-top: 1px solid var(--rule);
+}
+.step:last-child { border-bottom: 1px solid var(--rule); }
+.step-n {
+  flex: 0 0 1.75rem;
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  line-height: 1.9;
+  color: var(--mute);
+}
+.step-h { margin: 0 0 0.25rem; font-size: 1rem; font-weight: 600; letter-spacing: -0.01em; }
+.step-b { margin: 0; font-size: 0.9375rem; color: var(--mute); }
+/* Lit while the terminal is on that step. Colour only — nothing moves. */
+.step.is-on { border-left: 2px solid var(--ochre); padding-left: 1rem; margin-left: -1.125rem; }
+.step.is-on .step-n { color: var(--ochre); }
+
+.term { border: 1px solid var(--rule); background: var(--slate); }
+.term-bar {
+  padding: 0.5rem 0.875rem;
+  border-bottom: 1px solid var(--rule);
+}
+.term-path {
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  color: var(--mute);
+}
+.term-body {
+  margin: 0;
+  padding: 0.875rem;
+  font-family: var(--mono);
+  font-size: 0.8125rem;
+  line-height: 1.85;
+  overflow-x: auto;
+}
+.term-prompt { color: var(--ochre); }
+.term-out { display: block; padding-left: 0.9rem; color: var(--mute); }
+.term-out b { color: var(--bone); font-weight: 400; }
+.term-ok { color: var(--ochre); }
+.term-out.pending { visibility: hidden; }
+
+.caret { display: none; }
+.term.armed .caret {
+  display: inline-block;
+  width: 0.5em;
+  height: 1em;
+  margin-left: 0.1em;
+  background: var(--ochre);
+  vertical-align: text-bottom;
+  animation: blink 1s steps(1) infinite;
+}
+@keyframes blink { 50% { opacity: 0; } }
+
 /* ---------- faq ---------- */
 
 .faq { max-width: 46rem; }
@@ -551,6 +703,12 @@ html:not(.js) .theme { display: none; }
 .foot-links a:hover { color: var(--bone); }
 
 /* ---------- narrow ---------- */
+
+@media (max-width: 60rem) {
+  /* The drift is atmosphere; it is the first thing to go when space is tight. */
+  .hero, .start { grid-template-columns: 1fr; }
+  .drift { display: none; }
+}
 
 @media (max-width: 46rem) {
   .grid { grid-template-columns: 1fr; }

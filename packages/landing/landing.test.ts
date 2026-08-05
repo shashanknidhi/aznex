@@ -8,7 +8,9 @@ const css = await Bun.file(join(import.meta.dir, "styles.css")).text();
 // the service actually serves, every visitor gets a broken install.
 test("the install one-liner points at the apex install.sh", () => {
   const matches = html.match(/curl -fsSL https:\/\/aznex\.ai\/install\.sh \| bash/g);
-  expect(matches?.length).toBe(2); // hero and closer
+  // Hero, the terminal demo and the closer. More is fine; fewer means one of
+  // them drifted from the command the service actually serves.
+  expect(matches?.length).toBeGreaterThanOrEqual(3);
 });
 
 test("sign-in links go to the app host", () => {

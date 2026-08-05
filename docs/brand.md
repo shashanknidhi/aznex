@@ -135,9 +135,14 @@ gradient, anywhere.** The only bordered box is a memory, and its border is ochre
 
 ### Motion
 
-One orchestrated moment per surface, and it must depict a real mechanism —
-motion is explanation, not delight. `prefers-reduced-motion` shows the final
-frame; the animation is opt-in via a class JS withholds.
+Motion must depict a real mechanism — it is explanation, not delight. The
+budget is **at most one moving thing in the viewport at a time**, so sequences
+are scroll-triggered where they sit rather than all playing at load. Ambient,
+continuous motion is allowed only when what is moving is real content (the
+landing hero's drifting memory titles are actual memories, not filler).
+
+`prefers-reduced-motion` and JS-off both show the finished frame: the CSS
+renders the end state and the animation is additive, never the other way round.
 
 ### Imagery
 

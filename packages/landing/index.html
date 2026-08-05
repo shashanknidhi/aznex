@@ -55,16 +55,33 @@ if (localStorage.getItem("aznex-theme") === "light")
 <main id="main">
 
   <section class="section hero">
-    <h1 class="hero-title">Your agent forgets.<br><span class="hero-title-em">Your team shouldn't.</span></h1>
-    <p class="hero-sub">Aznex is the shared context layer for your repo. One developer's agent works
-      something out; every teammate's agent starts from there.</p>
+    <div class="hero-copy">
+      <h1 class="hero-title">Your agent forgets.<br><span class="hero-title-em">Your team shouldn't.</span></h1>
+      <p class="hero-sub">Aznex is the shared context layer for your repo. One developer's agent works
+        something out; every teammate's agent starts from there.</p>
 
-    <div class="install">
-      <pre class="install-cmd"><code id="cmd">curl -fsSL https://aznex.ai/install.sh | bash</code></pre>
-      <button class="install-copy" type="button" data-copy="#cmd">Copy</button>
+      <div class="install">
+        <pre class="install-cmd"><code id="cmd">curl -fsSL https://aznex.ai/install.sh | bash</code></pre>
+        <button class="install-copy" type="button" data-copy="#cmd">Copy</button>
+      </div>
+      <p class="install-note">Installs the worker, wires capture hooks for Claude Code and Codex, and registers
+        the <code>aznex</code> MCP server. Nothing to paste, no API key.</p>
     </div>
-    <p class="install-note">Installs the worker, wires capture hooks for Claude Code and Codex, and registers
-      the <code>aznex</code> MCP server. Nothing to paste, no API key.</p>
+
+    <!-- The stream, drifting. Real memory titles, not filler — this is what the
+         store fills up with. Hidden on narrow screens and under reduced motion. -->
+    <div class="drift" aria-hidden="true">
+      <div class="drift-track">
+        <p class="drift-item"><span>decision</span>Authorize on collaborator membership, never permission level</p>
+        <p class="drift-item"><span>negative_result</span>Retrying the 413 does not help — the payload cap is the cause</p>
+        <p class="drift-item"><span>extracted_learning</span>Hooks must return before extraction, or the IDE stalls</p>
+        <p class="drift-item"><span>decision</span>One SQLite file, isolation enforced by the authorizer</p>
+        <p class="drift-item"><span>summary</span>Ingest stores every extracted field; anchors derive server-side</p>
+        <p class="drift-item"><span>negative_result</span>Per-org database files cost more than they buy</p>
+        <p class="drift-item"><span>extracted_learning</span>Cross-tenant requests 404, or the tenant list leaks</p>
+        <p class="drift-item"><span>decision</span>Deletion is the only withdrawal — no staleness state</p>
+      </div>
+    </div>
   </section>
 
   <!-- Signature: the write path, animated. Raw tool calls stay local (mute),
@@ -139,7 +156,8 @@ if (localStorage.getItem("aznex-theme") === "light")
 
   <section class="section" aria-labelledby="privacy-h">
     <div class="claim">
-      <h2 class="claim-title" id="privacy-h">Extraction runs on your machine, on the subscription you already pay for.</h2>
+      <h2 class="claim-title" id="privacy-h">Extraction runs on your machine.<br><span class="claim-title-em">On
+        the subscription you already pay for.</span></h2>
       <p class="claim-body">The background worker spawns the coding-agent CLI you are already signed in to —
         Claude Code or Codex — to turn a session into structured memory. There is no separate API key and no
         per-seat LLM bill. File contents, command output and diffs never leave the machine; only the finished
@@ -194,12 +212,66 @@ if (localStorage.getItem("aznex-theme") === "light")
     </div>
     <p class="prose recall-note">No prompt to write, no file to paste. The agent asks about the file it is
       already editing and gets what the team knows about it.</p>
+
+    <p class="chips-label">Capture needs a hook, so it is Claude Code and Codex today. Reading needs only MCP:</p>
+    <ul class="chips">
+      <li class="chip chip-both">Claude Code<span>capture + read</span></li>
+      <li class="chip chip-both">Codex<span>capture + read</span></li>
+      <li class="chip">Cursor<span>read</span></li>
+      <li class="chip">Windsurf<span>read</span></li>
+      <li class="chip">VS Code<span>read</span></li>
+      <li class="chip">Zed<span>read</span></li>
+      <li class="chip chip-any">any MCP client<span>read</span></li>
+    </ul>
+  </section>
+
+  <!-- Getting started: a real sequence, so the numbers are earned. -->
+  <section class="section" aria-labelledby="start-h">
+    <h2 class="eyebrow" id="start-h">Getting started</h2>
+    <div class="start">
+      <div class="start-copy">
+        <p class="start-title">One command.<br><span class="start-title-em">Then nothing.</span></p>
+        <ol class="steps">
+          <li class="step" data-step="1">
+            <span class="step-n">01</span>
+            <div>
+              <h3 class="step-h">Run the installer</h3>
+              <p class="step-b">Installs the worker, signs you in through GitHub in a browser tab, starts
+                the daemon. No key to copy anywhere.</p>
+            </div>
+          </li>
+          <li class="step" data-step="2">
+            <span class="step-n">02</span>
+            <div>
+              <h3 class="step-h">Work as usual</h3>
+              <p class="step-b">Hooks fire on every session. Extraction runs on your machine. You are not
+                asked to do anything, ever again.</p>
+            </div>
+          </li>
+          <li class="step" data-step="3">
+            <span class="step-n">03</span>
+            <div>
+              <h3 class="step-h">Ask anything</h3>
+              <p class="step-b">Your agent queries the team's context over MCP, scoped to the repo it is
+                already sitting in.</p>
+            </div>
+          </li>
+        </ol>
+      </div>
+
+      <div class="term" data-term>
+        <div class="term-bar"><span class="term-path">~/dev/aznex</span></div>
+        <!-- No newlines between these spans: they are display:block inside a
+             <pre>, so a line break in the source prints an extra blank line. -->
+        <pre class="term-body"><code><span class="term-cmd"><span class="term-prompt">$</span> <span data-type>curl -fsSL https://aznex.ai/install.sh | bash</span><span class="caret"></span></span><span class="term-out" data-out="1">installing @aznex/worker</span><span class="term-out" data-out="1">signed in as <b>you</b> — no api key stored</span><span class="term-out" data-out="2">hooks wired: claude code, codex</span><span class="term-out" data-out="3">mcp server registered: <b>aznex</b></span><span class="term-out term-ok" data-out="3">daemon running — capture on</span></code></pre>
+      </div>
+    </div>
   </section>
 
   <section class="section" aria-labelledby="self-h">
     <h2 class="eyebrow" id="self-h">Self-host</h2>
-    <p class="prose">Aznex is one deployable — ingestion API, MCP endpoint and viewer in a single container.
-      Run it on your own infrastructure and the context never touches ours.</p>
+    <p class="prose">Run the whole thing yourself and the context never touches us. Aznex is one
+      deployable — ingestion API, MCP endpoint and viewer in a single container.</p>
     <p class="prose"><a href="https://github.com/shashanknidhi/aznex/blob/main/docs/setup.md">Setup guide →</a></p>
   </section>
 
@@ -302,14 +374,50 @@ for (const btn of document.querySelectorAll(".install-copy")) {
   });
 }
 
-// The tape animates only when it is on screen and motion is welcome. Without
-// this class the CSS already shows the finished frame, so no-JS and
-// reduced-motion users see the same diagram, just not assembling itself.
-const tape = document.querySelector("[data-animate]");
-if (tape && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
+// Motion below is additive: the CSS already renders the finished state, so
+// no-JS and reduced-motion visitors get the same page without the assembly.
+const stillness = matchMedia("(prefers-reduced-motion: reduce)");
+const onScreen = (el, run) =>
   new IntersectionObserver((entries, obs) => {
-    for (const e of entries) if (e.isIntersecting) { e.target.classList.add("play"); obs.unobserve(e.target); }
-  }, { threshold: 0.35 }).observe(tape);
+    for (const e of entries) if (e.isIntersecting) { obs.unobserve(e.target); run(e.target); }
+  }, { threshold: 0.35 }).observe(el);
+
+const tape = document.querySelector("[data-animate]");
+if (tape && !stillness.matches) onScreen(tape, (el) => el.classList.add("play"));
+
+// The drift loops by translating the track half its height, so it needs two
+// copies of the list to be seamless. Only worth duplicating if it will move.
+const driftTrack = document.querySelector(".drift-track");
+if (driftTrack && !stillness.matches) driftTrack.innerHTML += driftTrack.innerHTML;
+
+// The install terminal types its command, then drops each output line as the
+// step it belongs to lights up. Steps and lines are paired by data-step/data-out.
+const term = document.querySelector("[data-term]");
+if (term && !stillness.matches) {
+  const typed = term.querySelector("[data-type]");
+  const command = typed.textContent;
+  const lines = [...term.querySelectorAll("[data-out]")];
+  const steps = [...document.querySelectorAll(".step")];
+  const light = (n) => steps.forEach((s) => s.classList.toggle("is-on", s.dataset.step === String(n)));
+
+  typed.textContent = "";
+  term.classList.add("armed");
+  lines.forEach((l) => l.classList.add("pending"));
+
+  onScreen(term, async () => {
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    light(1);
+    for (const ch of command) { typed.textContent += ch; await wait(28); }
+    await wait(320);
+    term.classList.remove("armed"); // caret stops blinking, output begins
+    for (const line of lines) {
+      light(Number(line.dataset.out));
+      line.classList.remove("pending");
+      await wait(420);
+    }
+    // Ends on the last step rather than clearing, so the finished state is the
+    // same one a no-JS visitor sees plus the step the sequence landed on.
+  });
 }
 </script>
 

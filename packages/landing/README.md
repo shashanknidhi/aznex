@@ -26,8 +26,10 @@ reference rendering — if the two disagree, one of them is a bug.
   before first paint.
 - **Every claim must be true today.** Trace it to the README, `CLAUDE.md` or
   working code. Roadmap items (Postgres + pgvector, Neo4j) do not appear here.
-- Page weight budget: 100 KB for everything the page loads. Currently ~90 KB,
-  most of it the two fonts.
+- Page weight: ~108 KB uncompressed, of which 69 KB is the two woff2 fonts
+  (already compressed) and 38 KB is HTML + CSS that gzips to 11 KB.
+  So ~79 KB over the wire, against a 100 KB budget. If the HTML and CSS grow
+  much past this, subset the fonts harder before cutting content.
 
 ## Fonts
 
