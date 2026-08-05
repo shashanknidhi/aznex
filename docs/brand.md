@@ -95,23 +95,28 @@ Wordmark: `aznex`, lowercase, Bricolage Grotesque 700, tracking −4.5%.
 
 ### Palette
 
-| Token | Hex | Means |
-|---|---|---|
-| ink | `#0B0E14` | ground (never `#000`) |
-| slate | `#141A24` | raised surface |
-| rule | `#232C3A` | hairline |
-| bone | `#E6E9EF` | primary text |
-| mute | `#7E8BA3` | secondary text — **and** raw, local, not yet shared |
-| ochre | `#E0A458` | the one accent — **shared context, crossed the wire** |
+| Token | Dark | Light | Means |
+|---|---|---|---|
+| ink | `#0B0E14` | `#F4F6F9` | ground (never `#000`) |
+| slate | `#141A24` | `#FFFFFF` | raised surface |
+| rule | `#3D4C62` | `#A6B1C2` | hairline |
+| bone | `#E6E9EF` | `#131A24` | primary text |
+| mute | `#9AA7BD` | `#475162` | secondary text — **and** raw, local, not yet shared |
+| ochre | `#E0A458` | `#734506` | the one accent — **shared context, crossed the wire** |
+
+**Every text pair clears WCAG AAA (7:1) against both grounds** — that is the
+floor, not the goal, and it is why the two ochres are so far apart: the mid-tone
+that reads right on ink lands at 4.1 on paper, which fails even AA, including
+the copy-button label. Changing `--mute` or `--ochre` means re-checking against
+both `--ink` and `--slate` in the theme you touched.
 
 **Ochre is never decorative.** It carries a meaning, so it cannot be spent on
 emphasis.
 
 **Dark is the default for everyone**, system preference included — the palette
 is the brand, not an accommodation. Light is an explicit, remembered choice
-behind a toggle: paper `#F4F6F9`, ochre darkened to `#A96A15` to hold contrast
-against it. Surfaces implement this as `:root[data-theme="light"]`, never as a
-bare `prefers-color-scheme` block, or the default stops being a decision.
+behind a toggle. Surfaces implement it as `:root[data-theme="light"]`, never as
+a bare `prefers-color-scheme` block, or the default stops being a decision.
 
 ### Type
 

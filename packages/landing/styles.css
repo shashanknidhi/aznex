@@ -17,12 +17,14 @@
 }
 
 :root {
+  /* Every text pair here clears WCAG AAA (7:1) against both --ink and --slate.
+     Do not darken --mute or lighten --ochre without re-checking both grounds. */
   --ink: #0b0e14;
   --slate: #141a24;
-  --rule: #232c3a;
-  --bone: #e6e9ef;
-  --mute: #7e8ba3;
-  --ochre: #e0a458;
+  --rule: #3d4c62;
+  --bone: #e6e9ef; /* 15.9 on ink */
+  --mute: #9aa7bd; /* 7.9 on ink, 7.2 on slate */
+  --ochre: #e0a458; /* 8.9 on ink, 8.0 on slate */
 
   --display: "Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
   --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
@@ -35,10 +37,12 @@
 :root[data-theme="light"] {
   --ink: #f4f6f9;
   --slate: #ffffff;
-  --rule: #d7dee8;
-  --bone: #131a24;
-  --mute: #5c6a80;
-  --ochre: #a96a15;
+  --rule: #a6b1c2;
+  --bone: #131a24; /* 16.2 on paper */
+  --mute: #475162; /* 7.4 on paper, 8.0 on white */
+  /* Ochre has to go this deep on a light ground: the mid-tone that reads right
+     on ink lands at 4.1 here, which fails AA — including the copy button. */
+  --ochre: #734506; /* 7.5 on paper, and 7.5 for paper text on the button */
   color-scheme: light;
 }
 
