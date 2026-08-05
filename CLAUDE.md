@@ -32,6 +32,8 @@ packages/
   worker/    @aznex/worker   — local background worker (hooks → extract → scrub → POST)
   service/   @aznex/service  — single deployable (ingestion API + MCP + frontend API)
   frontend/  @aznex/frontend — React SPA memory viewer
+  landing/   (no package)    — static marketing page for the apex domain, served
+                               by the service when Host matches AZNEX_LANDING_HOST
 docker/
   Dockerfile.service
   docker-compose.yml

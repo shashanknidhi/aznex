@@ -1,0 +1,775 @@
+/* aznex.ai — static marketing page. No build step, no external requests.
+   Colour is semantic here, not decoration: cool grey = raw material that stays
+   on the developer's machine, ochre = the structured memory that crosses the
+   wire and gets shared. Nothing else is allowed to be warm. */
+
+@font-face {
+  font-family: "Bricolage Grotesque";
+  src: url("/assets/bricolage-grotesque-latin.woff2") format("woff2");
+  font-weight: 400 800;
+  font-display: swap;
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/assets/jetbrains-mono-latin.woff2") format("woff2");
+  font-weight: 400 500;
+  font-display: swap;
+}
+
+:root {
+  /* Every text pair here clears WCAG AAA (7:1) against both --ink and --slate.
+     Do not darken --mute or lighten --ochre without re-checking both grounds. */
+  --ink: #0b0e14;
+  --slate: #141a24;
+  --rule: #3d4c62;
+  --bone: #e6e9ef; /* 15.9 on ink */
+  --mute: #9aa7bd; /* 7.9 on ink, 7.2 on slate */
+  --ochre: #e0a458; /* 8.9 on ink, 8.0 on slate */
+
+  --display: "Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  --page: 68rem;
+  color-scheme: dark;
+}
+
+/* Dark is the default for everyone, system preference included — the palette is
+   the brand, not an accommodation. Light is an explicit, remembered choice. */
+:root[data-theme="light"] {
+  --ink: #f4f6f9;
+  --slate: #ffffff;
+  --rule: #a6b1c2;
+  --bone: #131a24; /* 16.2 on paper */
+  --mute: #475162; /* 7.4 on paper, 8.0 on white */
+  /* Ochre has to go this deep on a light ground: the mid-tone that reads right
+     on ink lands at 4.1 here, which fails AA — including the copy button. */
+  --ochre: #734506; /* 7.5 on paper, and 7.5 for paper text on the button */
+  color-scheme: light;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--ink);
+  color: var(--bone);
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: 1.0625rem;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+a { color: inherit; text-decoration-color: var(--mute); text-underline-offset: 0.2em; }
+a:hover { text-decoration-color: var(--ochre); }
+
+:focus-visible {
+  outline: 2px solid var(--ochre);
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+
+code { font-family: var(--mono); font-size: 0.9em; }
+
+.skip {
+  position: absolute;
+  left: -9999px;
+}
+.skip:focus {
+  left: 1rem;
+  top: 1rem;
+  z-index: 10;
+  background: var(--slate);
+  padding: 0.5rem 0.75rem;
+}
+
+/* ---------- nav ---------- */
+
+.nav {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  max-width: var(--page);
+  margin: 0 auto;
+  padding: 1.75rem 1.5rem;
+}
+
+.wordmark {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.045em;
+  text-decoration: none;
+}
+
+/* Three raw traces resolving into one remembered unit — the same thing the
+   hero diagram acts out. The viewBox is cropped to the glyph so the mark
+   reads at the wordmark's own size instead of shrinking inside its padding. */
+.mark { height: 0.92em; width: 1.2em; flex: none; }
+
+.nav-links {
+  display: flex;
+  gap: 1.5rem;
+  font-size: 0.9375rem;
+  color: var(--mute);
+}
+.nav-links a { text-decoration: none; }
+.nav-links a:hover { color: var(--bone); }
+.nav-cta { color: var(--ochre); }
+
+.theme {
+  display: flex;
+  align-items: center;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--mute);
+  cursor: pointer;
+}
+.theme:hover { color: var(--bone); }
+.theme-icon { width: 0.9375rem; height: 0.9375rem; display: block; }
+:root[data-theme="light"] .theme-icon { transform: rotate(180deg); }
+/* No JS, no choice to offer — the page is dark and the button would lie. */
+html:not(.js) .theme { display: none; }
+
+/* ---------- shared section rhythm ---------- */
+
+.section {
+  max-width: var(--page);
+  margin: 0 auto;
+  padding: 3.25rem 1.5rem;
+}
+
+.eyebrow {
+  margin: 0 0 2rem;
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  font-weight: 400;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--mute);
+}
+
+.prose {
+  max-width: 42rem;
+  margin: 0 0 1.25rem;
+  color: var(--mute);
+}
+.prose a { color: var(--bone); }
+
+/* ---------- hero ---------- */
+
+.hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 18rem);
+  align-items: center;
+  gap: 2.5rem;
+  padding-top: 4rem;
+  padding-bottom: 2.5rem;
+}
+
+/* Ambient, and the only continuous motion on the page: the stream the store
+   fills up with. Slow enough to read one line, quiet enough to ignore. */
+.drift {
+  height: 22rem;
+  overflow: hidden;
+  mask-image: linear-gradient(transparent, #000 18%, #000 82%, transparent);
+  -webkit-mask-image: linear-gradient(transparent, #000 18%, #000 82%, transparent);
+}
+.drift-track { animation: drift 46s linear infinite; }
+.drift:hover .drift-track { animation-play-state: paused; }
+.drift-item {
+  margin: 0;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--rule);
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  color: var(--mute);
+}
+.drift-item span {
+  display: block;
+  font-family: var(--mono);
+  font-size: 0.625rem;
+  letter-spacing: 0.08em;
+  color: var(--ochre);
+  margin-bottom: 0.25rem;
+}
+@keyframes drift {
+  to { transform: translateY(-50%); }
+}
+
+/* Grid items default to min-width:auto, and the un-wrappable install command
+   inside would otherwise set the column's floor and overflow narrow screens. */
+.hero-copy, .start-copy, .term { min-width: 0; }
+
+.hero-title {
+  margin: 0;
+  font-size: clamp(2.75rem, 6.4vw, 4.75rem);
+  font-weight: 600;
+  line-height: 0.98;
+  letter-spacing: -0.045em;
+  font-variation-settings: "opsz" 96;
+}
+.hero-title-em { color: var(--mute); }
+
+.hero-sub {
+  max-width: 34rem;
+  margin: 1.75rem 0 2.5rem;
+  font-size: 1.1875rem;
+  color: var(--mute);
+}
+
+.cta-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 0.5rem;
+}
+/* Inside a step the column is narrow, so the command and its button have to
+   stay on one line and let the command scroll rather than wrapping under it. */
+.cta-row-tight { margin-top: 0.875rem; flex-wrap: nowrap; }
+.cta-row-tight .install-cmd { padding: 0.6rem 0.75rem; font-size: 0.8125rem; }
+.cta-row-tight .install-copy { padding: 0.6rem 0.9rem; }
+
+.btn {
+  padding: 0.875rem 1.25rem;
+  border: 1px solid var(--ochre);
+  font-family: var(--mono);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-decoration: none;
+  cursor: pointer;
+}
+.btn-solid { background: var(--ochre); color: var(--ink); }
+.btn-solid:hover { background: transparent; color: var(--ochre); }
+.btn-ghost { border-color: var(--rule); color: var(--bone); }
+.btn-ghost:hover { border-color: var(--ochre); color: var(--ochre); }
+
+.install-cmd {
+  /* flex items default to min-width:auto, which lets the un-wrappable command
+     push the whole page wider than the viewport on phones. */
+  min-width: 0;
+  flex: 0 1 auto;
+  margin: 0;
+  padding: 0.875rem 1.125rem;
+  background: var(--slate);
+  border: 1px solid var(--rule);
+  font-family: var(--mono);
+  font-size: 0.9375rem;
+  overflow-x: auto;
+}
+
+.install-copy {
+  padding: 0.875rem 1.25rem;
+  background: var(--ochre);
+  color: var(--ink);
+  border: 1px solid var(--ochre);
+  font-family: var(--mono);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.install-copy:hover { background: transparent; color: var(--ochre); }
+
+.install-note {
+  max-width: 34rem;
+  margin: 1.25rem 0 0;
+  font-size: 0.9375rem;
+  color: var(--mute);
+}
+
+/* ---------- the tape (signature) ---------- */
+
+.tape-wrap { padding-top: 2.5rem; }
+
+.tape {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) 2.5rem auto 2.5rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0 0.75rem;
+}
+
+.tape-col { min-width: 0; }
+
+.tape-label {
+  margin: 0 0 0.75rem;
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--mute);
+}
+.tape-label-end { margin: 0.75rem 0 0; color: var(--ochre); }
+
+.raw-list { margin: 0; padding: 0; list-style: none; }
+
+.raw {
+  padding: 0.4rem 0;
+  border-bottom: 1px solid var(--rule);
+  font-family: var(--mono);
+  font-size: 0.8125rem;
+  color: var(--mute);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.raw-tool { color: var(--bone); }
+
+.wire {
+  position: relative;
+  height: 1px;
+  background: var(--rule);
+  transform-origin: left center;
+}
+.wire::after {
+  content: "";
+  position: absolute;
+  top: -2px;
+  left: 0;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--mute);
+  opacity: 0;
+}
+.wire-2::after { background: var(--ochre); }
+
+.tape-node { text-align: center; }
+
+.node {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.875rem 1rem;
+  background: var(--slate);
+  border: 1px solid var(--rule);
+}
+.node-title {
+  font-family: var(--mono);
+  font-size: 0.8125rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.node-sub { font-size: 0.75rem; color: var(--mute); }
+
+.node-foot {
+  margin: 0.625rem 0 0;
+  font-size: 0.6875rem;
+  font-family: var(--mono);
+  color: var(--mute);
+}
+
+.memcard {
+  padding: 1rem 1.125rem;
+  background: var(--slate);
+  border: 1px solid var(--ochre);
+}
+.memcard-type {
+  margin: 0 0 0.5rem;
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.06em;
+  color: var(--ochre);
+}
+.memcard-title {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.015em;
+}
+.memcard-body { margin: 0; font-size: 0.875rem; color: var(--mute); }
+.memcard-anchor {
+  margin: 0.75rem 0 0;
+  padding-top: 0.625rem;
+  border-top: 1px solid var(--rule);
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  color: var(--mute);
+}
+
+/* Default state is the finished frame. Animations are added only by the
+   .play class, which JS withholds under prefers-reduced-motion. */
+.tape.play .raw {
+  animation: raw-in 0.45s ease-out calc(var(--i) * 110ms) backwards;
+}
+.tape.play .wire { animation: wire-draw 0.4s ease-out backwards; }
+.tape.play .wire-1 { animation-delay: 0.55s; }
+.tape.play .wire-2 { animation-delay: 1.35s; }
+.tape.play .wire::after { animation: dot-run 0.4s ease-in-out backwards; }
+.tape.play .wire-1::after { animation-delay: 0.55s; }
+.tape.play .wire-2::after { animation-delay: 1.35s; }
+.tape.play .node { animation: node-wake 0.5s ease-out 0.9s backwards; }
+.tape.play .node-foot { animation: fade-in 0.4s ease-out 1.2s backwards; }
+.tape.play .memcard { animation: card-in 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) 1.7s backwards; }
+.tape.play .tape-label-end { animation: fade-in 0.4s ease-out 2.1s backwards; }
+
+@keyframes raw-in {
+  from { opacity: 0; transform: translateX(-0.75rem); }
+}
+@keyframes wire-draw {
+  from { transform: scaleX(0); }
+}
+@keyframes dot-run {
+  from { opacity: 1; left: 0; }
+  99% { opacity: 1; left: 100%; }
+  to { opacity: 0; left: 100%; }
+}
+@keyframes node-wake {
+  from { opacity: 0; border-color: var(--ochre); transform: scale(0.96); }
+}
+@keyframes card-in {
+  from { opacity: 0; transform: translateY(0.75rem); }
+}
+@keyframes fade-in {
+  from { opacity: 0; }
+}
+
+/* ---------- asymmetric feature block ---------- */
+
+.claim {
+  padding-bottom: 2.5rem;
+  border-bottom: 1px solid var(--rule);
+}
+.claim-title {
+  max-width: 30ch;
+  margin: 0 0 1.25rem;
+  font-size: clamp(1.5rem, 3.2vw, 2.25rem);
+  font-weight: 500;
+  line-height: 1.15;
+  letter-spacing: -0.03em;
+}
+.claim-title-em { color: var(--mute); }
+.claim-body {
+  max-width: 44rem;
+  margin: 0;
+  color: var(--mute);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2rem 3rem;
+  max-width: 54rem;
+  padding-top: 2.5rem;
+}
+.cell-title {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.cell-body { margin: 0; font-size: 0.9375rem; color: var(--mute); }
+
+/* ---------- team: many sessions, one store ---------- */
+
+.team {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) 2.5rem auto 2.5rem minmax(0, 0.8fr);
+  align-items: center;
+  gap: 0 0.75rem;
+}
+
+.who-list { margin: 0; padding: 0; list-style: none; }
+.who {
+  display: flex;
+  gap: 0.75rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--rule);
+  font-size: 0.875rem;
+  color: var(--mute);
+}
+.who-name {
+  flex: 0 0 3rem;
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  line-height: 1.8;
+  color: var(--bone);
+}
+
+.team-store {
+  padding: 1rem 1.125rem;
+  background: var(--slate);
+  border: 1px solid var(--ochre);
+  text-align: center;
+}
+.store-title {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 0.8125rem;
+  letter-spacing: 0.06em;
+  color: var(--ochre);
+}
+.store-sub { margin: 0.375rem 0 0; font-size: 0.75rem; color: var(--mute); }
+
+.out-line {
+  margin: 0;
+  font-size: 1.0625rem;
+  font-weight: 500;
+  line-height: 1.3;
+  letter-spacing: -0.015em;
+}
+
+/* ---------- recall: the read side ---------- */
+
+.recall { max-width: 46rem; }
+.recall-call {
+  margin: 0;
+  padding: 0.75rem 1rem;
+  background: var(--slate);
+  border: 1px solid var(--rule);
+  font-family: var(--mono);
+  font-size: 0.8125rem;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+.recall-arrow { color: var(--mute); }
+.recall-arg { color: var(--ochre); }
+
+.recall-list { margin: 0; padding: 0; list-style: none; }
+.recall-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 1rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--rule);
+  border-top: none;
+  font-size: 0.9375rem;
+}
+.recall-type {
+  flex: 0 0 9.5rem;
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.06em;
+  color: var(--ochre);
+  line-height: 1.9;
+}
+.recall-note { margin-top: 1.25rem; }
+
+/* ---------- agent chips ---------- */
+
+.chips-label {
+  max-width: 46rem;
+  margin: 2rem 0 1rem;
+  font-size: 0.875rem;
+  color: var(--mute);
+}
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.chip {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--rule);
+  font-size: 0.875rem;
+}
+.chip span {
+  display: block;
+  font-family: var(--mono);
+  font-size: 0.625rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--mute);
+  margin-top: 0.2rem;
+}
+/* Capture is the narrower claim, so the ones that do both are the ones marked. */
+.chip-both { border-color: var(--ochre); }
+.chip-both span { color: var(--ochre); }
+.chip-any { border-style: dashed; }
+
+/* ---------- getting started: steps + terminal ---------- */
+
+.start {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
+  align-items: start;
+  gap: 3rem;
+}
+
+.start-title {
+  margin: 0 0 2rem;
+  font-size: clamp(1.75rem, 3.6vw, 2.5rem);
+  font-weight: 500;
+  line-height: 1.05;
+  letter-spacing: -0.035em;
+}
+.start-title-em { color: var(--mute); }
+
+.steps { margin: 0; padding: 0; list-style: none; }
+.step {
+  display: flex;
+  gap: 1rem;
+  padding: 1rem 0;
+  border-top: 1px solid var(--rule);
+}
+.step:last-child { border-bottom: 1px solid var(--rule); }
+.step > div { min-width: 0; } /* so the command inside can shrink and scroll */
+.step-n {
+  flex: 0 0 1.75rem;
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  line-height: 1.9;
+  color: var(--mute);
+}
+.step-h { margin: 0 0 0.25rem; font-size: 1rem; font-weight: 600; letter-spacing: -0.01em; }
+.step-b { margin: 0; font-size: 0.9375rem; color: var(--mute); }
+/* Lit while the terminal is on that step. Colour only — nothing moves. */
+.step.is-on { border-left: 2px solid var(--ochre); padding-left: 1rem; margin-left: -1.125rem; }
+.step.is-on .step-n { color: var(--ochre); }
+
+.term { border: 1px solid var(--rule); background: var(--slate); }
+.term-bar {
+  padding: 0.5rem 0.875rem;
+  border-bottom: 1px solid var(--rule);
+}
+.term-path {
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  color: var(--mute);
+}
+.term-body {
+  margin: 0;
+  padding: 0.875rem;
+  font-family: var(--mono);
+  font-size: 0.8125rem;
+  line-height: 1.85;
+  overflow-x: auto;
+}
+.term-prompt { color: var(--ochre); }
+.term-out { display: block; padding-left: 0.9rem; color: var(--mute); }
+.term-out b { color: var(--bone); font-weight: 400; }
+.term-ok { color: var(--ochre); }
+.term-out.pending { visibility: hidden; }
+
+.caret { display: none; }
+.term.armed .caret {
+  display: inline-block;
+  width: 0.5em;
+  height: 1em;
+  margin-left: 0.1em;
+  background: var(--ochre);
+  vertical-align: text-bottom;
+  animation: blink 1s steps(1) infinite;
+}
+@keyframes blink { 50% { opacity: 0; } }
+
+/* ---------- faq ---------- */
+
+.faq { max-width: 46rem; }
+.faq details { border-top: 1px solid var(--rule); }
+.faq details:last-child { border-bottom: 1px solid var(--rule); }
+.faq summary {
+  padding: 1rem 0;
+  font-weight: 500;
+  cursor: pointer;
+  list-style: none;
+}
+.faq summary::-webkit-details-marker { display: none; }
+.faq summary::before {
+  content: "+";
+  display: inline-block;
+  width: 1.5rem;
+  font-family: var(--mono);
+  color: var(--ochre);
+}
+.faq details[open] summary::before { content: "\2212"; }
+.faq p {
+  margin: 0 0 1.25rem 1.5rem;
+  color: var(--mute);
+  max-width: 40rem;
+}
+
+/* ---------- closer + footer ---------- */
+
+.closer { padding-bottom: 5rem; }
+.closer-sub {
+  max-width: 34rem;
+  margin: 0 0 1.5rem;
+  color: var(--mute);
+}
+.closer-line {
+  margin: 0 0 0.75rem;
+  font-size: clamp(1.75rem, 4vw, 2.5rem);
+  font-weight: 500;
+  letter-spacing: -0.03em;
+}
+
+.foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  max-width: var(--page);
+  margin: 0 auto;
+  padding: 1.75rem 1.5rem 3rem;
+  border-top: 1px solid var(--rule);
+  font-size: 0.875rem;
+  color: var(--mute);
+}
+.foot-mark {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 700;
+  letter-spacing: -0.045em;
+  color: var(--bone);
+}
+.foot-links { display: flex; flex-wrap: wrap; gap: 1.25rem; }
+.foot-links a { text-decoration: none; }
+.foot-links a:hover { color: var(--bone); }
+
+/* ---------- narrow ---------- */
+
+@media (max-width: 60rem) {
+  /* The drift is atmosphere; it is the first thing to go when space is tight. */
+  .hero, .start { grid-template-columns: 1fr; }
+  .drift { display: none; }
+}
+
+@media (max-width: 46rem) {
+  .grid { grid-template-columns: 1fr; }
+  .recall-type { flex: 1 0 100%; line-height: 1.4; }
+  .tape,
+  .team {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+  .team-store { text-align: left; }
+  .tape-node { text-align: left; }
+  .wire {
+    justify-self: start;
+    width: 1px;
+    height: 2.5rem;
+    margin-left: 1.25rem;
+    transform-origin: top center;
+  }
+  .wire::after { top: 0; left: -2px; }
+  @keyframes wire-draw {
+    from { transform: scaleY(0); }
+  }
+  @keyframes dot-run {
+    from { opacity: 1; top: 0; }
+    99% { opacity: 1; top: 100%; }
+    to { opacity: 0; top: 100%; }
+  }
+  .node { display: inline-flex; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}

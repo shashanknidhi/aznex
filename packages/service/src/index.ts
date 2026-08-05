@@ -53,7 +53,15 @@ if (import.meta.main) {
   // where the Vite dev server proxies /api instead.
   const { existsSync } = await import('fs');
   const distDir = new URL('../../frontend/dist', import.meta.url).pathname;
-  const app = createApp(db, { auth, staticDir: existsSync(distDir) ? distDir : undefined });
+  // Static marketing page for the apex domain. Same guard: if the directory is
+  // missing (or AZNEX_LANDING_HOST is unset) the feature is simply off.
+  const landingDir = new URL('../../landing', import.meta.url).pathname;
+  const app = createApp(db, {
+    auth,
+    staticDir: existsSync(distDir) ? distDir : undefined,
+    landingDir: existsSync(landingDir) ? landingDir : undefined,
+    landingHosts: config.landingHosts,
+  });
   console.log(`@aznex/service listening on :${config.port}`);
   Bun.serve({ port: config.port, fetch: app.fetch });
 }

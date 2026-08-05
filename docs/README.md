@@ -5,6 +5,7 @@
 | [setup.md](setup.md) | You want to install Aznex — as a developer joining a team, or as an admin deploying it |
 | [development.md](development.md) | You want to run the stack from a clone, run the tests, or hack on it |
 | [data-lifecycle.md](data-lifecycle.md) | You need the state machine for an entity — org, membership, session, repo, API key |
+| [brand.md](brand.md) | You are writing copy or building a surface — positioning, voice, palette, type, what never appears |
 
 Also useful:
 
