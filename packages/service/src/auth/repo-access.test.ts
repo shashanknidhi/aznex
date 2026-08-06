@@ -10,7 +10,6 @@ const config: Config = {
   githubAppId: "12345",
   githubAppPrivateKey: privateKey.export({ type: "pkcs1", format: "pem" }).toString(),
   repoAccessTtlMs: 60_000,
-  landingHosts: [],
 };
 
 const user = { id: "u1", github_login: "alice" } as User;

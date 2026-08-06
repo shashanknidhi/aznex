@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Navigate, useSearchParams } from "react-router-dom";
 import { api, authClient } from "../api.js";
+import { appUrl } from "../auth.js";
 import { useAsync } from "../hooks.js";
 import { BareShell } from "../components/Shell.js";
 import { ErrorNote, Loading, Note } from "../components/ui.js";
@@ -55,7 +56,9 @@ export function Login() {
             // Previously unhandled: a rejected sign-in left the page looking
             // like the click hadn't registered.
             void authClient
-              .signIn.social({ provider: "github", callbackURL: next })
+              // callbackURL leaves the router: better-auth hands it to GitHub
+              // and the browser lands on it directly, so it needs the basename.
+              .signIn.social({ provider: "github", callbackURL: appUrl(next) })
               .catch((e: unknown) => setError(e));
           }}
         >

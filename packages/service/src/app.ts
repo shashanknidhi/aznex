@@ -27,7 +27,7 @@ export interface AppEnv {
 
 export function createApp(
   db: Database,
-  opts?: { auth?: Auth; staticDir?: string; landingDir?: string; landingHosts?: string[] },
+  opts?: { auth?: Auth; staticDir?: string; landingDir?: string },
 ): Hono<AppEnv> {
   const app = new Hono<AppEnv>();
   const auth = opts?.auth ?? null;
@@ -91,7 +91,6 @@ export function createApp(
   // other GET falls back to index.html for client-side routing.
   const staticDir = opts?.staticDir;
   const landingDir = opts?.landingDir;
-  const landingHosts = opts?.landingHosts ?? [];
   if (staticDir || landingDir) {
     // A file from `dir`, or null if the path escapes the directory or misses.
     const fileIn = async (dir: string, path: string) => {
@@ -104,25 +103,26 @@ export function createApp(
         headers: { "Content-Type": "text/html; charset=utf-8" },
       });
 
+    // The SPA lives under /dashboard, the marketing page owns the root. Same
+    // host for both — one origin, so the session cookie and /api are shared.
     app.get("*", async (c) => {
-      const path = new URL(c.req.url).pathname;
+      const url = new URL(c.req.url);
+      const path = url.pathname;
 
-      // Apex domain (aznex.ai): marketing page. Unknown paths redirect to the
-      // app rather than falling back to the landing page, so a shared deep link
-      // like aznex.ai/repo/x opens the repo instead of silently showing
-      // marketing copy. API groups and /install.sh are registered above and
-      // still win here — the install one-liner works on both hosts.
-      const host = (c.req.header("host") ?? "").toLowerCase().replace(/:\d+$/, "");
-      if (landingDir && landingHosts.includes(host)) {
-        if (path === "/") return html(`${landingDir}/index.html`);
-        const asset = await fileIn(landingDir, path);
-        if (asset) return asset;
-        const base = (process.env["AZNEX_BASE_URL"] ?? "").replace(/\/+$/, "");
-        return c.redirect(`${base}${path}${new URL(c.req.url).search}`, 302);
+      if (staticDir && (path === "/dashboard" || path.startsWith("/dashboard/"))) {
+        const rest = path.slice("/dashboard".length) || "/";
+        return (await fileIn(staticDir, rest)) ?? html(`${staticDir}/index.html`);
       }
 
-      if (!staticDir) return c.notFound();
-      return (await fileIn(staticDir, path)) ?? html(`${staticDir}/index.html`);
+      // Anything the landing page doesn't own belongs to the app. The redirect
+      // is load-bearing, not a nicety: worker versions already in the wild open
+      // `${serviceUrl}/cli-auth`, and the GitHub App's setup URL still points at
+      // /github/setup. API groups and /install.sh are registered above and win.
+      const toApp = () => c.redirect(`/dashboard${path === "/" ? "" : path}${url.search}`, 302);
+
+      if (!landingDir) return staticDir ? toApp() : c.notFound();
+      if (path === "/") return html(`${landingDir}/index.html`);
+      return (await fileIn(landingDir, path)) ?? (staticDir ? toApp() : c.notFound());
     });
   }
 

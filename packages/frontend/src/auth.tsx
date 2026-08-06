@@ -35,6 +35,20 @@ export function useMe(): SessionValue {
   return useContext(SessionContext);
 }
 
+/**
+ * The SPA is mounted under /dashboard so the landing page can own the root.
+ * Router-relative paths are unprefixed; anything that touches window.location
+ * or leaves the SPA (OAuth callbacks) needs `appUrl`.
+ */
+export const BASENAME = "/dashboard";
+
+/** A router path as a real URL path. `appUrl("/login")` → `/dashboard/login`. */
+export const appUrl = (path: string) => `${BASENAME}${path === "/" ? "" : path}`;
+
+/** The inverse: a real URL path back to a router path, for `next` params. */
+export const routerPath = (path: string) =>
+  path.startsWith(BASENAME) ? path.slice(BASENAME.length) || "/" : path;
+
 /** Sign out and land on the login page. */
 export async function signOut(): Promise<void> {
   try {
@@ -42,7 +56,7 @@ export async function signOut(): Promise<void> {
   } finally {
     // Hard navigation, not a client-side one: it throws away every component's
     // cached state along with the session.
-    window.location.assign("/login");
+    window.location.assign(appUrl("/login"));
   }
 }
 
@@ -60,8 +74,8 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     setUnauthorizedHandler(() => {
       void authClient.signOut().finally(() => {
-        const next = window.location.pathname + window.location.search;
-        window.location.assign(`/login?reason=expired&next=${encodeURIComponent(next)}`);
+        const next = routerPath(window.location.pathname) + window.location.search;
+        window.location.assign(`${appUrl("/login")}?reason=expired&next=${encodeURIComponent(next)}`);
       });
     });
   }, []);

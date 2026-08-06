@@ -5,7 +5,7 @@ React + Vite SPA for browsing team memory. **Read-only** — capture happens in
 `@aznex/service` from `dist/`; in dev, Vite proxies `/api` to `localhost:3000`.
 
 ```sh
-bun run --cwd packages/frontend dev        # vite dev server on :5173
+bun run --cwd packages/frontend dev        # vite dev server on :5173/dashboard/
 bun run --cwd packages/frontend build      # production bundle into dist/
 bun test packages/frontend                 # pure-function tests
 ```

@@ -121,8 +121,9 @@ test("staticDir serves files and falls back to index.html for SPA routes", async
 
   const app = createApp(openDatabase(":memory:"), { staticDir: dir });
 
-  expect(await (await app.request("/assets/app.js")).text()).toBe("console.log(1)");
-  for (const path of ["/", "/repo/github.com%2Facme%2Fapi", "/nope"]) {
+  // The SPA is mounted under /dashboard, so its own paths carry that prefix.
+  expect(await (await app.request("/dashboard/assets/app.js")).text()).toBe("console.log(1)");
+  for (const path of ["/dashboard", "/dashboard/repo/github.com%2Facme%2Fapi", "/dashboard/nope"]) {
     const res = await app.request(path);
     expect(res.status).toBe(200);
     expect(await res.text()).toBe("<html>spa</html>");
@@ -130,8 +131,11 @@ test("staticDir serves files and falls back to index.html for SPA routes", async
   // API groups still win over the static fallback
   expect((await app.request("/health")).headers.get("content-type")).toContain("application/json");
   expect((await app.request("/api/memories")).status).toBe(401);
-  // traversal outside the dir is refused (falls back to index)
-  expect(await (await app.request("/../etc/passwd")).text()).toBe("<html>spa</html>");
+  // Traversal outside the dir is refused: an encoded separator survives URL
+  // normalization, so the handler's own `..` check is what stops it. (A literal
+  // `/dashboard/../etc/passwd` never reaches the handler — WHATWG URL collapses
+  // it to /etc/passwd, which is outside the SPA prefix and just redirects.)
+  expect(await (await app.request("/dashboard/..%2fetc/passwd")).text()).toBe("<html>spa</html>");
 });
 
 test("/install.sh serves a valid bash script with the service URL baked in", async () => {

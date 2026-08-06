@@ -47,7 +47,7 @@ pointing `AZNEX_BASE_URL` at `http://localhost:3000`.
 ## Frontend
 
 ```sh
-bun run --cwd packages/frontend dev    # http://localhost:5173
+bun run --cwd packages/frontend dev    # http://localhost:5173/dashboard/
 ```
 
 `AZNEX_FRONTEND_ORIGIN` defaults to `http://localhost:5173`, which is the only

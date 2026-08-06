@@ -1,5 +1,5 @@
 import { BrowserRouter, Route, Routes } from "react-router-dom";
-import { RequireAuth, SessionProvider } from "./auth.js";
+import { BASENAME, RequireAuth, SessionProvider } from "./auth.js";
 import { ErrorBoundary } from "./components/ErrorBoundary.js";
 import { CliAuth } from "./pages/CliAuth.js";
 import { GetStarted } from "./pages/GetStarted.js";
@@ -17,7 +17,7 @@ const authed = (element: React.ReactNode) => <RequireAuth>{element}</RequireAuth
 export default function App() {
   return (
     <ErrorBoundary>
-      <BrowserRouter>
+      <BrowserRouter basename={BASENAME}>
         <SessionProvider>
           <Routes>
             <Route path="/login" element={<Login />} />
