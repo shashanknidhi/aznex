@@ -6,8 +6,10 @@ const css = await Bun.file(join(import.meta.dir, "styles.css")).text();
 
 // The install command is the product's front door: if it drifts from the one
 // the service actually serves, every visitor gets a broken install.
-test("the install one-liner points at the apex install.sh", () => {
-  const matches = html.match(/curl -fsSL https:\/\/aznex\.ai\/install\.sh \| bash/g);
+test("the install one-liner points at the host that serves install.sh", () => {
+  // Absolute by necessity — it's a shell command, not a link — so it has to
+  // name the host the service actually answers on, not the apex.
+  const matches = html.match(/curl -fsSL https:\/\/app\.aznex\.ai\/install\.sh \| bash/g);
   // The installer step and the terminal demo. More is fine; fewer means one of
   // them drifted from the command the service actually serves.
   expect(matches?.length).toBeGreaterThanOrEqual(2);
@@ -15,8 +17,9 @@ test("the install one-liner points at the apex install.sh", () => {
 
 test("sign-in links point at the app, which is same-origin under /dashboard", () => {
   expect(html).toContain('href="/dashboard"');
-  // An absolute app host would break every other deployment of this page.
-  expect(html).not.toContain("https://app.aznex.ai");
+  // An absolute href would break every other deployment of this page. The
+  // install one-liner is exempt: a shell command can't be relative.
+  expect(html).not.toMatch(/<a[^>]+href="https:\/\/app\.aznex\.ai/);
 });
 
 // "No external requests" is the whole reason this directory has no build step.
