@@ -1,13 +1,16 @@
 # Landing page
 
-The static marketing site served at the apex domain (`aznex.ai`). Hand-written
-HTML and CSS — no build step, no framework, no dependency. `@aznex/service`
-copies this directory verbatim and serves it when the request's `Host` matches
-`AZNEX_LANDING_HOST`; every other host keeps getting the app SPA.
+The static marketing site served at the site root. Hand-written HTML and CSS —
+no build step, no framework, no dependency. `@aznex/service` copies this
+directory verbatim and serves it at `/`; the app SPA lives under `/dashboard`
+(vite `base`, matching `BrowserRouter basename`). One host, one origin, so the
+session cookie and `/api` are shared.
 
 `/install.sh`, `/api/*`, `/v1/*`, `/mcp/*` and `/health` are registered above
-the host branch in the service, so they answer on the apex domain too. Any other
-unknown path on the apex redirects to `AZNEX_BASE_URL`.
+the static branch, so they still win. Any other path this directory doesn't own
+redirects to `/dashboard<path>` — load-bearing, because published worker
+versions open `${serviceUrl}/cli-auth` and the GitHub App's setup URL still
+points at `/github/setup`.
 
 Positioning, voice, palette, type and the "never" list live in
 [`docs/brand.md`](../../docs/brand.md). This directory is that document's
@@ -55,7 +58,8 @@ python3 -m http.server 8899 --directory packages/landing
 Or through the service, which is what production does:
 
 ```sh
-AZNEX_LANDING_HOST=aznex.ai AZNEX_BASE_URL=https://app.aznex.ai \
-  bun run --cwd packages/service dev
-curl -s -H 'Host: aznex.ai' localhost:3000/
+bun run --cwd packages/frontend build   # the service only mounts /dashboard if dist exists
+bun run --cwd packages/service dev
+curl -s localhost:3000/            # landing
+curl -s localhost:3000/dashboard   # app
 ```

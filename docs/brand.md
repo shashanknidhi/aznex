@@ -171,7 +171,7 @@ rather than described, self-host section reduced to a pointer at the docs.
 
 ### Next
 
-**`app.aznex.ai` is on a different visual system.**
+**The app under `/dashboard` is on a different visual system.**
 `packages/frontend/src/styles.css` is light-first with its own token set, so a
 developer who installs from the landing page and signs in walks into what looks
 like a different product. Adopting these tokens in the SPA is the highest-value
