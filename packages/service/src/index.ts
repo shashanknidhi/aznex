@@ -53,9 +53,9 @@ if (import.meta.main) {
   // where the Vite dev server proxies /api instead.
   const { existsSync } = await import('fs');
   const distDir = new URL('../../frontend/dist', import.meta.url).pathname;
-  // Static marketing page at the root. Same guard: if the directory is missing
-  // the feature is simply off and / redirects to the app.
-  const landingDir = new URL('../../landing', import.meta.url).pathname;
+  // Marketing page at the root. Same guard: if the directory is missing the
+  // feature is simply off and / redirects to the app.
+  const landingDir = new URL('../../landing/dist', import.meta.url).pathname;
   const app = createApp(db, {
     auth,
     staticDir: existsSync(distDir) ? distDir : undefined,

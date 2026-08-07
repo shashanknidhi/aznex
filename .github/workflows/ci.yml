@@ -86,6 +86,28 @@ jobs:
       - name: Build
         run: bun run --cwd packages/frontend build
 
+  landing:
+    name: "@aznex/landing"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Typecheck
+        run: bunx tsc --noEmit -p packages/landing/tsconfig.json
+
+      - name: Test
+        run: bun test packages/landing
+
+      - name: Build
+        run: bun run --cwd packages/landing build
+
   docker:
     name: "Docker image (Railway artifact)"
     runs-on: ubuntu-latest

@@ -1,10 +1,14 @@
 # Landing page
 
-The static marketing site served at the site root. Hand-written HTML and CSS —
-no build step, no framework, no dependency. `@aznex/service` copies this
-directory verbatim and serves it at `/`; the app SPA lives under `/dashboard`
-(vite `base`, matching `BrowserRouter basename`). One host, one origin, so the
-session cookie and `/api` are shared.
+The marketing site served at the site root. A React + Vite app: `index.html` is
+the entry shell, `src/App.tsx` is the page, and everything in `public/` ships
+verbatim. `@aznex/service` serves the built `dist/` at `/`; the app SPA lives
+under `/dashboard` (vite `base`, matching `BrowserRouter basename`). One host,
+one origin, so the session cookie and `/api` are shared.
+
+Build it before the service can serve it — `bun run --cwd packages/landing
+build`. Without a `dist/`, the landing branch is simply off and `/` redirects to
+the app.
 
 `/install.sh`, `/api/*`, `/v1/*`, `/mcp/*` and `/health` are registered above
 the static branch, so they still win. Any other path this directory doesn't own
@@ -20,10 +24,10 @@ reference rendering — if the two disagree, one of them is a bug.
 
 - **No external requests.** Fonts are self-hosted, SVGs are inline, there is no
   analytics script. The page must render with nothing but this directory.
-- **No JS beyond the copy button, the theme toggle and one IntersectionObserver.**
-  Everything else works with JS disabled — the page stays dark, the toggle hides
-  itself, and the hero diagram shows its finished frame. Same under
-  `prefers-reduced-motion`.
+- **The page renders client-side.** It is React, so JS is required — there is no
+  server render and no static fallback. Under `prefers-reduced-motion` the CSS
+  still paints every finished state, so the page reads identically without the
+  assembly (`src/effects.ts` is additive and no-ops).
 - **Dark is the default for every visitor.** Light is an explicit choice stored
   in `localStorage` and applied as `data-theme="light"` by an inline head script,
   before first paint.
@@ -33,15 +37,15 @@ reference rendering — if the two disagree, one of them is a bug.
   invite-only (`middleware/auth.ts:32` refuses any login without an org
   membership), so the primary CTA asks for pilot access. The install one-liner
   lives in the Getting started step, after you have a service URL.
-- Page weight: ~108 KB uncompressed, of which 69 KB is the two woff2 fonts
-  (already compressed) and 38 KB is HTML + CSS that gzips to 11 KB.
-  So ~79 KB over the wire, against a 100 KB budget. If the HTML and CSS grow
-  much past this, subset the fonts harder before cutting content.
+- Page weight: ~69 KB of woff2 fonts (already compressed), ~11 KB of gzipped
+  CSS + HTML, and a 213 KB JS bundle that gzips to 66 KB — ~146 KB over the
+  wire. React is the bulk of it. If this needs to come down, dropping the
+  framework buys back more than any amount of content cutting.
 
 ## Fonts
 
 Bricolage Grotesque and JetBrains Mono, both SIL Open Font License 1.1
-(`assets/OFL.txt`). The committed files are latin-only subsets:
+(`public/assets/OFL.txt`). The committed files are latin-only subsets:
 
 ```sh
 pyftsubset <font>.woff2 --output-file=<font>-latin.woff2 --flavor=woff2 \
@@ -52,13 +56,14 @@ pyftsubset <font>.woff2 --output-file=<font>-latin.woff2 --flavor=woff2 \
 ## Preview
 
 ```sh
-python3 -m http.server 8899 --directory packages/landing
+bun run --cwd packages/landing dev   # :5174, with the annotation toolbar
 ```
 
 Or through the service, which is what production does:
 
 ```sh
 bun run --cwd packages/frontend build   # the service only mounts /dashboard if dist exists
+bun run --cwd packages/landing build    # ...and only mounts / if landing/dist exists
 bun run --cwd packages/service dev
 curl -s localhost:3000/            # landing
 curl -s localhost:3000/dashboard   # app

@@ -32,7 +32,7 @@ packages/
   worker/    @aznex/worker   — local background worker (hooks → extract → scrub → POST)
   service/   @aznex/service  — single deployable (ingestion API + MCP + frontend API)
   frontend/  @aznex/frontend — React SPA memory viewer
-  landing/   (no package)    — static marketing page served by the service at
+  landing/   @aznex/landing  — React marketing page served by the service at
                                the site root; the SPA sits under /dashboard
 docker/
   Dockerfile.service
