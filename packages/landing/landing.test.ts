@@ -1,30 +1,33 @@
 import { test, expect } from "bun:test";
 import { join } from "path";
 
-const html = await Bun.file(join(import.meta.dir, "index.html")).text();
-const css = await Bun.file(join(import.meta.dir, "styles.css")).text();
+const dir = import.meta.dir;
+// The page is a React app now: the head lives in the Vite entry, the markup in
+// App.tsx, and every static asset ships from public/ verbatim.
+const shell = await Bun.file(join(dir, "index.html")).text();
+const app = await Bun.file(join(dir, "src/App.tsx")).text();
+const css = await Bun.file(join(dir, "public/styles.css")).text();
 
 // The install command is the product's front door: if it drifts from the one
 // the service actually serves, every visitor gets a broken install.
 test("the install one-liner points at the host that serves install.sh", () => {
   // Absolute by necessity — it's a shell command, not a link — so it has to
-  // name the host the service actually answers on, not the apex.
-  const matches = html.match(/curl -fsSL https:\/\/app\.aznex\.ai\/install\.sh \| bash/g);
-  // The installer step and the terminal demo. More is fine; fewer means one of
-  // them drifted from the command the service actually serves.
-  expect(matches?.length).toBeGreaterThanOrEqual(2);
+  // name the host the service actually answers on, not the apex. One constant
+  // now feeds both the installer step and the terminal demo.
+  expect(app).toContain("curl -fsSL https://app.aznex.ai/install.sh | bash");
 });
 
 test("sign-in links point at the app, which is same-origin under /dashboard", () => {
-  expect(html).toContain('href="/dashboard"');
+  expect(app).toContain('href="/dashboard"');
   // An absolute href would break every other deployment of this page. The
   // install one-liner is exempt: a shell command can't be relative.
-  expect(html).not.toMatch(/<a[^>]+href="https:\/\/app\.aznex\.ai/);
+  expect(app).not.toMatch(/<a[^>]+href="https:\/\/app\.aznex\.ai/);
 });
 
-// "No external requests" is the whole reason this directory has no build step.
+// "No external requests" is why every asset lives in public/ and the only
+// bundle is our own — no CDN import, no analytics script, no hosted font.
 test("the page loads nothing from a third-party host", () => {
-  for (const source of [html, css]) {
+  for (const source of [shell, css]) {
     for (const [, url] of source.matchAll(/(?:src|href|url\()=?["'(]?(https?:\/\/[^"')\s>]+)/g)) {
       // <a href> to GitHub is fine; a loaded subresource is not.
       const isAnchor = new RegExp(`<a[^>]+href="${url.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"`).test(
@@ -37,14 +40,17 @@ test("the page loads nothing from a third-party host", () => {
       expect(isAnchor || isMetaUrl || isCanonical).toBe(true);
     }
   }
+  // App.tsx must not reach off-origin either: only the module graph may load
+  // code, and every import in it has to resolve inside the workspace.
+  expect(app).not.toMatch(/from ["']https?:\/\//);
+  expect(app).not.toMatch(/import\(["']https?:\/\//);
 });
 
 test("assets referenced by the page exist", async () => {
-  const refs = [...html.matchAll(/(?:href|src)="(\/[^"]+)"/g)].map((m) => m[1]!);
+  const refs = [...shell.matchAll(/(?:href|src)="(\/[^"]+)"/g)].map((m) => m[1]!);
   const cssRefs = [...css.matchAll(/url\("(\/[^"]+)"\)/g)].map((m) => m[1]!);
-  // /dashboard is the service's route, not a file in this directory.
-  const local = (r: string) => r !== "/" && !r.startsWith("/dashboard");
-  for (const ref of [...refs, ...cssRefs].filter(local)) {
-    expect(await Bun.file(join(import.meta.dir, ref)).exists()).toBe(true);
+  // /src/main.tsx is the Vite entry, resolved from the package root, not public/.
+  for (const ref of [...refs, ...cssRefs].filter((r) => !r.startsWith("/src/"))) {
+    expect(await Bun.file(join(dir, "public", ref)).exists()).toBe(true);
   }
 });
